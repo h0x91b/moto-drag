@@ -1,35 +1,44 @@
 # Repository Guidelines
 
-All contributors share a single PlatformIO environment for the ESP32-C3 DevKitM-1. The goal is to keep firmware changes predictable, reviewable, and ready for quick iteration on hardware.
+This repo hosts firmware for the moto-drag lap timer built on the ESP32-C3 DevKitM-1. Iterate in small steps so track tests stay predictable.
+
+## Project Context
+
+- Device runs as an open Wi-Fi AP (`moto-drag`) on the bike, exposing a SPA for riders right after a gymkhana run.
+- `/api/last.json` returns an array of `[timestamp, [lap1, lap2, …]]`; future revisions will swap the static payload for sensor-driven data and persistent history.
+- Current focus: reliable lap capture with a responsive UI; next milestones add calibration, cloud sync, and OTA updates.
+
+## Architecture Overview
+
+- `src/main.cpp` bootstraps SPIFFS, the HTTP server, and the blink loop; extend it with helper functions instead of crowding `loop()`.
+- Static assets reside under `assets/` and are flashed with `pio run -t uploadfs`; treat it as the SPA root.
 
 ## Project Structure & Module Organization
 
-- `platformio.ini` holds the single `esp32c3` environment; keep board- or serial-port tweaks confined to this file.
-- `src/main.cpp` contains the Arduino `setup()`/`loop()` entrypoint. Place feature-specific helpers above `loop()` and preface new modules with brief comments describing their hardware touchpoints.
-- Add reusable components under `lib/<module-name>/` and shared headers in `include/`. Keep assets such as calibration data in `data/` so they can be uploaded with the SPIFFS tooling.
+- `platformio.ini` defines the lone `esp32c3` environment plus serial speeds; add new environments only when testing alternate boards.
+- Place shared headers in `include/` and reusable modules under `lib/`; document wiring assumptions near each entrypoint.
+- Store calibration blobs or seed datasets alongside the SPA in `assets/` so they ride with filesystem flashes.
 
 ## Build, Flash & Monitor Commands
 
-- `pio run` compiles the firmware and should stay warning-free.
-- `pio run -t upload` builds and flashes to the connected DevKitM-1; set `upload_port` in `platformio.ini` if auto-detection fails.
-- `pio device monitor --baud 115200` opens the serial console; use `Ctrl+]` to exit.
+- `pio run` compiles firmware; warnings must be resolved before merge.
+- `pio run -t upload` builds and flashes the DevKitM-1; set `upload_port` if auto-detect fails.
+- `pio device monitor --baud 115200` tails serial logs; open it before resetting the board to capture boot notes.
 
 ## Coding Style & Naming Conventions
 
-- Follow the existing two-space indentation and brace-on-same-line style shown in `src/main.cpp`.
-- Prefer descriptive `camelCase` for functions and variables; reserve all-caps for constants like `LED_PIN`.
-- Guard hardware-specific logic behind helper functions (`toggleIndicatorLed()`) to simplify mocking in tests.
-- Run `pio run --target clangformat` if you add a `.clang-format`; otherwise keep manual formatting consistent.
+- Use two-space indentation and K&R braces, mirroring the current sketch.
+- Prefer descriptive `camelCase` identifiers; reserve SCREAMING_CASE for globals that map to pins or configuration constants.
+- Wrap multi-step hardware access in helpers (`readLapSensors()`) so UI code can focus on formatting.
 
 ## Testing Guidelines
 
-- Place unit tests under `test/<feature>/` using PlatformIO’s Unity harness; name files `test_<behavior>.cpp`.
-- Run `pio test` before opening a pull request. Aim to cover edge cases that could cause flashing or timing regressions.
-- For features requiring hardware verification, document the manual test steps in the PR description.
+- Organize PlatformIO Unity tests under `test/<feature>/` with files named `test_<behavior>.cpp`.
+- Run `pio test` before every PR; capture sensor edge cases and race conditions that affect lap timing.
+- Record any manual verification (track tests, scope captures) in the PR description for future regression checks.
 
 ## Commit & Pull Request Guidelines
 
-- Write commit titles in the imperative mood (`Add blink timing guard`) with <= 72 characters, followed by concise body details when needed.
-- Reference GitHub issues with `Fixes #123` in the final commit or PR description.
-- Open PRs with a change summary, test evidence (`pio test`, serial logs), and screenshots of relevant serial output when timing or diagnostics change.
-- Ask for review before merging and wait for at least one approval plus a green CI check (once CI is configured).
+- Commit titles stay imperative (`Add lap buffer parser`) and under 72 characters; expand details in the body when needed.
+- Reference issues with `Fixes #ID` and list the commands or monitors you ran.
+- PRs need a short change summary, UI/serial evidence, and at least one reviewer approval before merge.

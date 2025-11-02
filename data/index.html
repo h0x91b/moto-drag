@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moto-Drag Timing</title>
+    <style>
+      :root {
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #141414;
+        background-color: #f4f4f4;
+      }
+      body {
+        margin: 0;
+        padding: 1.5rem;
+      }
+      header {
+        max-width: 960px;
+        margin: 0 auto 1.5rem auto;
+      }
+      h1 {
+        margin: 0 0 0.25rem 0;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #e3e3e3;
+      }
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .timestamp {
+        white-space: nowrap;
+      }
+      .laps {
+        font-variant-numeric: tabular-nums;
+      }
+      #status {
+        margin-bottom: 1rem;
+        color: #666666;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Moto-Drag Live Laps</h1>
+      <p>Latest gymkhana runs from the on-bike timer.</p>
+    </header>
+    <main>
+      <div id="status">Loading lap data…</div>
+      <table aria-describedby="status">
+        <thead>
+          <tr>
+            <th scope="col">Ride Timestamp</th>
+            <th scope="col">Lap Times (s)</th>
+          </tr>
+        </thead>
+        <tbody id="rides"></tbody>
+      </table>
+    </main>
+    <script>
+      const statusEl = document.getElementById("status");
+      const ridesEl = document.getElementById("rides");
+
+      function formatTimestamp(value) {
+        if (!Number.isFinite(value)) return String(value);
+        const ms = value > 1e12 ? value : value * 1000;
+        return new Date(ms).toLocaleString();
+      }
+
+      function render(data) {
+        if (!Array.isArray(data) || data.length === 0) {
+          statusEl.textContent = "No rides recorded yet.";
+          ridesEl.innerHTML = "";
+          return;
+        }
+
+        const rows = data
+          .map(([timestamp, laps]) => {
+            const lapsHtml = Array.isArray(laps)
+              ? laps
+                  .map(
+                    (lap, idx) =>
+                      `<div>Lap ${idx + 1}: <strong>${lap.toFixed(
+                        3
+                      )}</strong></div>`
+                  )
+                  .join("")
+              : "-";
+            return `<tr><td class="timestamp">${formatTimestamp(
+              timestamp
+            )}</td><td class="laps">${lapsHtml}</td></tr>`;
+          })
+          .join("");
+
+        ridesEl.innerHTML = rows;
+        const now = new Date().toLocaleTimeString();
+        statusEl.textContent = `Last updated ${now}`;
+      }
+
+      async function fetchRides() {
+        try {
+          const response = await fetch("/api/last.json", { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json();
+          render(payload);
+        } catch (error) {
+          statusEl.textContent = `Failed to load lap data: ${error.message}`;
+        }
+      }
+
+      fetchRides();
+      setInterval(fetchRides, 5000);
+    </script>
+  </body>
+</html>
