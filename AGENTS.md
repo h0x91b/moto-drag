@@ -11,13 +11,14 @@ This repo hosts firmware for the moto-drag lap timer built on the ESP32-C3 DevKi
 ## Architecture Overview
 
 - `src/main.cpp` bootstraps SPIFFS, the HTTP server, and the blink loop; extend it with helper functions instead of crowding `loop()`.
-- Static assets reside under `assets/` and are flashed with `pio run -t uploadfs`; treat it as the SPA root.
+- Static assets reside under `data/` and are flashed with `pio run -t uploadfs`; treat it as the SPA root.
+- Ride snapshots live in typed structs backed by `std::vector` containers (capped at 10 laps each, 100 rides total) and serialize through ArduinoJson; follow that pattern when expanding the API surface.
 
 ## Project Structure & Module Organization
 
 - `platformio.ini` defines the lone `esp32c3` environment plus serial speeds; add new environments only when testing alternate boards.
 - Place shared headers in `include/` and reusable modules under `lib/`; document wiring assumptions near each entrypoint.
-- Store calibration blobs or seed datasets alongside the SPA in `assets/` so they ride with filesystem flashes.
+- Store calibration blobs or seed datasets alongside the SPA in `data/` so they ride with filesystem flashes.
 
 ## Build, Flash & Monitor Commands
 
