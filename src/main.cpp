@@ -8,7 +8,7 @@
 #include <vector>
 
 const int LED_PIN = 8; // Onboard LED for ESP32-C3 DevKitM-1 lives on GPIO8
-const unsigned long BLINK_INTERVAL_MS = 300;
+const unsigned long BLINK_INTERVAL_MS = 500;
 
 const char *AP_SSID = "moto-drag";
 const uint16_t HTTP_PORT = 80;
