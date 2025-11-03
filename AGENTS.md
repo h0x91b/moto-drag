@@ -43,3 +43,17 @@ This repo hosts firmware for the moto-drag lap timer built on the ESP32-C3 DevKi
 - Commit titles stay imperative (`Add lap buffer parser`) and under 72 characters; expand details in the body when needed.
 - Reference issues with `Fixes #ID` and list the commands or monitors you ran.
 - PRs need a short change summary, UI/serial evidence, and at least one reviewer approval before merge.
+
+## ТЗ и статус
+
+- ТЗ по пользовательским историям: `docs/user_stories_ru.md`.
+
+### Чеклист
+
+- [x] Описаны актуальные пользовательские истории и критерии.
+- [ ] Реализовать мастер первой настройки (админ, название трассы, синхронизация времени, калибровка одного/двух лучей).
+- [ ] Добавить повторный доступ к калибровке и переключению режима лучей в админ-интерфейсе.
+- [ ] Реализовать веб-форму гонки (`moto.local`) с вводом имени, режима, количества кругов и кнопкой «Готов».
+- [ ] Настроить обработку лазерных датчиков: старт по первому импульсу, игнорирование заднего колеса, поддержка двух лучей.
+- [ ] Обновлять LED-панель: отображать `00:00.000` до старта, обновлять таймер каждые 100 мс, показывать результат бегущей строкой, поддержать кнопку сброса.
+- [ ] Хранить заезды в SPIFFS в JSONL (append-only), добавить разделы «Мои заезды» и «Топы» с рейтингами по суммарному времени и лучшему кругу, возможностью выгрузки архива.
