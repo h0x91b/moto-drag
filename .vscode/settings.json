@@ -1,6 +1,7 @@
 {
   "files.associations": {
     "*.json5": "json5",
-    "algorithm": "cpp"
+    "algorithm": "cpp",
+    "vector": "cpp"
   }
 }

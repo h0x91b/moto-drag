@@ -4,25 +4,48 @@
 #include <SPIFFS.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <algorithm>
 #include <vector>
 
-const int LED_PIN = 8; // Onboard LED for ESP32-C3 DevKitM-1 lives on GPIO8
+const int LED_PIN = 8;           // Onboard LED for ESP32-C3 DevKitM-1 lives on GPIO8
+const int PHOTORESISTOR_PIN = 0; // GPIO0 maps to ADC1_CH0 on ESP32-C3
 const unsigned long BLINK_INTERVAL_MS = 500;
+const unsigned long SENSOR_LOG_INTERVAL_MS = 500;
 
 const char *AP_SSID = "moto-drag";
 const uint16_t HTTP_PORT = 80;
 
 constexpr size_t MAX_RIDES = 100;
 constexpr size_t MAX_LAPS_PER_RIDE = 10;
-constexpr size_t JSON_CAPACITY = JSON_ARRAY_SIZE(MAX_RIDES) +
-                                 MAX_RIDES * (JSON_ARRAY_SIZE(2) + JSON_ARRAY_SIZE(MAX_LAPS_PER_RIDE));
-constexpr size_t JSON_BUFFER_SIZE = JSON_CAPACITY + 512;
+constexpr size_t JSON_BUFFER_SIZE = 4096; // Buffer headroom for /api/last.json payload
+
+constexpr uint16_t PANEL_RES_X = 32; // Base constants used by DMA config (see comment in mxconfig below)
+constexpr uint16_t PANEL_RES_Y = 64;
+constexpr uint8_t NUM_ROWS = 1;
+constexpr uint8_t NUM_COLS = 1;
+
+// HUB75 pin map (ESP32-C3 GPIO numbering)
+constexpr int8_t R1_PIN = 7;
+constexpr int8_t G1_PIN = 5;
+constexpr int8_t B1_PIN = 6;
+constexpr int8_t R2_PIN = 12;
+constexpr int8_t G2_PIN = 13;
+constexpr int8_t B2_PIN = 14;
+constexpr int8_t A_PIN = 4;
+constexpr int8_t B_PIN = 3;
+constexpr int8_t C_PIN = 2;
+constexpr int8_t D_PIN = 1;
+constexpr int8_t E_PIN = -1; // Not used on 1/16 scan panels
+constexpr int8_t LAT_PIN = 21;
+constexpr int8_t OE_PIN = 15;
+constexpr int8_t CLK_PIN = 20;
 
 WebServer webServer(HTTP_PORT);
 
 bool ledState = false;
 unsigned long lastBlinkAt = 0;
+unsigned long lastSensorSampleAt = 0;
 
 struct RideRecord
 {
@@ -31,6 +54,16 @@ struct RideRecord
 };
 
 static std::vector<RideRecord> rideHistory;
+
+MatrixPanel_I2S_DMA *matrixPanel = nullptr;
+bool matrixReady = false;
+constexpr unsigned long MATRIX_MESSAGE_INTERVAL_MS = 1000;
+unsigned long lastMatrixMessageAt = 0;
+bool matrixInvertState = false;
+
+void initMatrix();
+void drawMatrixGreeting(bool inverted);
+void updateMatrixGreeting(unsigned long now);
 
 void appendRide(uint32_t timestamp, const std::vector<float> &lapTimes)
 {
@@ -157,14 +190,14 @@ void handleRoot()
 void handleLastRides()
 {
   Serial.println("[HTTP] GET /api/last.json");
-  DynamicJsonDocument doc(JSON_BUFFER_SIZE);
+  JsonDocument doc;
   JsonArray root = doc.to<JsonArray>();
 
   for (const auto &ride : rideHistory)
   {
-    JsonArray rideArr = root.createNestedArray();
+    JsonArray rideArr = root.add<JsonArray>();
     rideArr.add(ride.timestamp);
-    JsonArray lapsArr = rideArr.createNestedArray();
+    JsonArray lapsArr = rideArr.add<JsonArray>();
     for (float lap : ride.laps)
     {
       lapsArr.add(lap);
@@ -204,6 +237,92 @@ void startAccessPoint()
   }
 }
 
+void initMatrix()
+{
+  if (matrixPanel)
+  {
+    return;
+  }
+
+  HUB75_I2S_CFG::i2s_pins pins = {
+      R1_PIN, G1_PIN, B1_PIN,
+      R2_PIN, G2_PIN, B2_PIN,
+      A_PIN, B_PIN, C_PIN, D_PIN, E_PIN,
+      LAT_PIN, OE_PIN, CLK_PIN};
+
+  HUB75_I2S_CFG mxconfig(
+      PANEL_RES_X * 2, // NO CAMBIES ESTO
+      PANEL_RES_Y / 2, // NO CAMBIES ESTO
+      NUM_ROWS * NUM_COLS,
+      pins);
+
+  mxconfig.double_buff = false;
+  mxconfig.clkphase = true;
+
+  matrixPanel = new MatrixPanel_I2S_DMA(mxconfig);
+  if (!matrixPanel)
+  {
+    Serial.println("[LED] matrix allocation failed");
+    return;
+  }
+  if (!matrixPanel->begin())
+  {
+    Serial.println("[LED] matrix begin() failed");
+    delete matrixPanel;
+    matrixPanel = nullptr;
+    return;
+  }
+
+  matrixPanel->setBrightness8(96);
+  matrixPanel->setTextWrap(false);
+  matrixPanel->setTextSize(1);
+  matrixPanel->clearScreen();
+
+  matrixReady = true;
+  drawMatrixGreeting(false);
+  Serial.println("[LED] HUB75 DMA matrix ready");
+}
+
+void drawMatrixGreeting(bool inverted)
+{
+  if (!matrixReady || !matrixPanel)
+  {
+    return;
+  }
+
+  uint16_t background = inverted ? matrixPanel->color565(12, 0, 48) : matrixPanel->color565(0, 0, 0);
+  uint16_t accent = inverted ? matrixPanel->color565(255, 200, 16) : matrixPanel->color565(0, 220, 160);
+  uint16_t text = matrixPanel->color565(255, 255, 255);
+  uint16_t frame = matrixPanel->color565(32, 32, 32);
+
+  matrixPanel->fillScreen(background);
+  matrixPanel->drawRect(0, 0, matrixPanel->width(), matrixPanel->height(), frame);
+
+  matrixPanel->setCursor(4, 6);
+  matrixPanel->setTextColor(accent);
+  matrixPanel->print("moto-drag");
+
+  matrixPanel->setCursor(10, 18);
+  matrixPanel->setTextColor(text);
+  matrixPanel->print("HELLO!");
+}
+
+void updateMatrixGreeting(unsigned long now)
+{
+  if (!matrixReady || !matrixPanel)
+  {
+    return;
+  }
+  if (now - lastMatrixMessageAt < MATRIX_MESSAGE_INTERVAL_MS)
+  {
+    return;
+  }
+
+  matrixInvertState = !matrixInvertState;
+  lastMatrixMessageAt = now;
+  drawMatrixGreeting(matrixInvertState);
+}
+
 void handleBlink(unsigned long now)
 {
   if (now - lastBlinkAt < BLINK_INTERVAL_MS)
@@ -216,9 +335,25 @@ void handleBlink(unsigned long now)
   lastBlinkAt = now;
 }
 
+void handleLightSensor(unsigned long now)
+{
+  if (now - lastSensorSampleAt < SENSOR_LOG_INTERVAL_MS)
+  {
+    return;
+  }
+
+  int raw = analogRead(PHOTORESISTOR_PIN);
+  if (Serial)
+  {
+    Serial.printf("[ADC] photoresistor=%d\n", raw); // Avoid blocking when USB console is detached
+  }
+  lastSensorSampleAt = now;
+}
+
 void setup()
 {
   pinMode(LED_PIN, OUTPUT);
+  pinMode(PHOTORESISTOR_PIN, INPUT);
   Serial.begin(115200);
   waitForSerial();
   Serial.println("\n[BOOT] ESP32-C3 ready with Wi-Fi access point");
@@ -242,11 +377,15 @@ void setup()
   webServer.onNotFound(handleNotFound);
   webServer.begin();
   Serial.println("[HTTP] server listening on port 80");
+
+  initMatrix();
 }
 
 void loop()
 {
   unsigned long now = millis();
   handleBlink(now);
+  handleLightSensor(now);
+  updateMatrixGreeting(now);
   webServer.handleClient();
 }
