@@ -153,6 +153,7 @@ refs.profileForm.addEventListener("submit", handleProfileSubmit);
 refs.profileForm.addEventListener("input", handleProfileDraft);
 bindActionButtons("calibrate", handleCalibration);
 bindActionButtons("sync-clock", handleClockSync);
+refs.nextStep?.addEventListener("click", handleNextStep);
 
 window.addEventListener("online", updateConnectionIndicator);
 window.addEventListener("offline", updateConnectionIndicator);
@@ -412,7 +413,8 @@ function handleNextStep() {
   if (refs.nextStep?.disabled) {
     return;
   }
-  showToast("Next page coming soon — stay tuned!");
+  showToast("Открываем страницу гонки…");
+  window.location.assign("/race.html");
 }
 
 function formatTimestamp(timestamp) {

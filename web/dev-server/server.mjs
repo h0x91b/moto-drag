@@ -8,6 +8,14 @@ const statePath = resolve(process.cwd(), "dev-server", "state.json");
 
 app.use(express.json());
 
+const DEFAULT_TRACK_LOCK = {
+  locked: false,
+  riderName: null,
+  lockedAt: null,
+  startedAt: null,
+  laps: [],
+};
+
 const DEFAULT_STATE = {
   trackName: "Unknown track",
   lapGoal: 3,
@@ -17,6 +25,7 @@ const DEFAULT_STATE = {
   clockSyncedHostAt: null,
   rides: [],
   updatedAt: null,
+  trackLock: DEFAULT_TRACK_LOCK,
 };
 
 const readState = () => {
@@ -33,6 +42,7 @@ const writeState = (nextState) => {
 };
 
 const state = readState();
+state.trackLock = { ...DEFAULT_TRACK_LOCK, ...state.trackLock };
 
 const moduleClockNow = () => {
   if (
@@ -60,6 +70,18 @@ function log(action, payload = {}) {
   console.log(`[dev-api] ${action}`, payload);
 }
 
+const computeTimerMs = () => {
+  if (!state.trackLock.locked) return 0;
+  const reference = state.trackLock.startedAt ?? state.trackLock.lockedAt;
+  if (typeof reference !== "number") return 0;
+  return Math.max(0, Date.now() - reference);
+};
+
+const getRaceStatus = () => ({
+  ...state.trackLock,
+  currentTimerMs: computeTimerMs(),
+});
+
 app.get("/api/last.json", (_req, res) => {
   log("GET /api/last.json");
   res.json(state.rides ?? []);
@@ -78,6 +100,11 @@ app.get("/api/admin/state", (_req, res) => {
     moduleTimeMs: moduleClockNow(),
     moduleMillis: moduleMillisNow(),
   });
+});
+
+app.get("/api/race/status", (_req, res) => {
+  log("GET /api/race/status");
+  res.json(getRaceStatus());
 });
 
 app.post("/api/admin/setup", (req, res) => {
@@ -130,6 +157,36 @@ app.post("/api/time/sync", (req, res) => {
       moduleMillis: moduleMillisNow(),
     });
   }, 300);
+});
+
+app.post("/api/race/lock", (req, res) => {
+  const riderName = String(req.body?.riderName || "").trim();
+  if (!riderName) {
+    log("POST /api/race/lock -> 400", { body: req.body });
+    return res.status(400).json({ error: "Missing riderName" });
+  }
+  if (state.trackLock.locked) {
+    log("POST /api/race/lock -> 409", { riderName });
+    return res.status(409).json(getRaceStatus());
+  }
+  const now = Date.now();
+  state.trackLock = {
+    locked: true,
+    riderName,
+    lockedAt: now,
+    startedAt: now,
+    laps: [],
+  };
+  writeState(state);
+  log("POST /api/race/lock -> 200", state.trackLock);
+  res.json({ ok: true, state: getRaceStatus() });
+});
+
+app.post("/api/race/reset", (_req, res) => {
+  state.trackLock = { ...DEFAULT_TRACK_LOCK };
+  writeState(state);
+  log("POST /api/race/reset -> 200");
+  res.json({ ok: true, state: getRaceStatus() });
 });
 
 app.listen(port, () => {

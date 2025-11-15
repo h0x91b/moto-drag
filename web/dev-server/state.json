@@ -2,12 +2,33 @@
   "trackName": "Unknown",
   "lapGoal": 2,
   "calibrationAt": 1763211149071,
-  "clockSyncedAt": 1763212987069,
-  "clockSyncedMillis": 377812,
-  "clockSyncedHostAt": 1763212987073,
+  "clockSyncedAt": 1763221668670,
+  "clockSyncedMillis": 9059413,
+  "clockSyncedHostAt": 1763221668680,
   "rides": [
-    [1699872000000, [13.802, 13.601, 13.421]],
-    [1699870000000, [14.32, 14.05, 13.98]]
+    [
+      1699872000000,
+      [
+        13.802,
+        13.601,
+        13.421
+      ]
+    ],
+    [
+      1699870000000,
+      [
+        14.32,
+        14.05,
+        13.98
+      ]
+    ]
   ],
-  "updatedAt": 1763211140781
+  "updatedAt": 1763211140781,
+  "trackLock": {
+    "locked": true,
+    "riderName": "Арсений",
+    "lockedAt": 1763222781811,
+    "startedAt": 1763222781811,
+    "laps": []
+  }
 }
