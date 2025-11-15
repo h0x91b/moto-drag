@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-This repo hosts firmware for the moto-drag lap timer built on the ESP32-WROOM-32 DevKitC (aka ESP32 Dev Module). Iterate in small steps so track tests stay predictable.
+This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3 DevKit (USB CDC/`/dev/cu.usbmodem*`). Iterate in small steps so track tests stay predictable, and keep ESP32-WROOM-32 notes around for when we return to the HUB75 panel.
 
 ## Project Context
 
@@ -10,7 +10,7 @@ This repo hosts firmware for the moto-drag lap timer built on the ESP32-WROOM-32
 
 ## Architecture Overview
 
-- `src/main.cpp` bootstraps SPIFFS, the HTTP server, and the blink loop; extend it with helper functions instead of crowding `loop()`. Mind the ESP32-WROOM-32 pinout (GPIO2 is the onboard LED, ADCs start at GPIO32/33).
+- `src/main.cpp` bootstraps SPIFFS, the HTTP server, and the blink loop; extend it with helper functions instead of crowding `loop()`. Mind the ESP32-C3 pinout (GPIO8 is the onboard LED, ADCs start at GPIO0/1); keep older WROOM wiring comments in each module if they still apply.
 - Static assets reside under `data/` and are flashed with `pio run -t uploadfs`; treat it as the SPA root.
 - Ride snapshots live in typed structs backed by `std::vector` containers (capped at 10 laps each, 100 rides total) and serialize through ArduinoJson; follow that pattern when expanding the API surface.
 
@@ -23,14 +23,14 @@ This repo hosts firmware for the moto-drag lap timer built on the ESP32-WROOM-32
 
 ## Project Structure & Module Organization
 
-- `platformio.ini` defines the lone `esp32dev` environment plus serial speeds; add new environments only when testing alternate boards.
+- `platformio.ini` defines the lone `esp32c3` environment (monitor/upload on `/dev/cu.usbmodem*`); add new environments only when testing alternate boards.
 - Place shared headers in `include/` and reusable modules under `lib/`; document wiring assumptions near each entrypoint.
 - Store calibration blobs or seed datasets alongside the SPA in `data/` so they ride with filesystem flashes.
 
 ## Build, Flash & Monitor Commands
 
 - `pio run` compiles firmware; warnings must be resolved before merge.
-- `pio run -t upload` builds and flashes the ESP32-WROOM-32 DevKitC; set `upload_port` if auto-detect fails.
+- `pio run -t upload` builds and flashes the ESP32-C3 DevKit; set `upload_port` if auto-detect fails (default `/dev/cu.usbmodem*`).
 - `pio device monitor --baud 115200` tails serial logs; open it before resetting the board to capture boot notes.
 
 ## Coding Style & Naming Conventions
@@ -64,4 +64,4 @@ This repo hosts firmware for the moto-drag lap timer built on the ESP32-WROOM-32
 - [ ] Настроить обработку лазерных датчиков: старт по первому импульсу, игнорирование заднего колеса, поддержка двух лучей.
 - [ ] Обновлять LED-панель: отображать `00:00.000` до старта, обновлять таймер каждые 100 мс, показывать результат бегущей строкой, поддержать кнопку сброса.
 - [ ] Хранить заезды в SPIFFS как дневные бинарные журналы (MessagePack/CBOR) с короткими ключами и идентификаторами пилотов/трасс, реализовать справочники, разделы «Мои заезды»/«Топы» и выгрузку архива.
-- [ ] Перенести HUB75-панель на ESP32 или ESP32-S3. ESP32-C3 не поддерживает LCD/I2S DMA, поэтому библиотека `ESP32-HUB75-MatrixPanel-I2S-DMA` не компилируется (ошибки `Bus_Parallel16`).
+- [ ] Перенести HUB75-панель на ESP32 или ESP32-S3. Текущая ESP32-C3 сборка работает без матрицы (ждём подходящую плату, библиотека `ESP32-HUB75-MatrixPanel-I2S-DMA` не поддерживает C3/I2S DMA).

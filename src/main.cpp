@@ -10,7 +10,7 @@ void setup()
   platform::waitForSerial();
 
   led::initBlinker();
-  Serial.println("\n[BOOT] ESP32-WROOM-32 blink demo ready");
+  Serial.println("\n[BOOT] ESP32-C3 blink demo ready");
   Serial.println("[BOOT] Legacy firmware is available via app::legacySetup()/legacyLoop()");
 }
 
