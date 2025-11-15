@@ -42,3 +42,16 @@
 
 .pio/build/
 .pio/libdeps/
+
+# Web workspace artifacts
+node_modules/
+web/node_modules/
+web/dist/
+web/.vite/
+web/.DS_Store
+
+# macOS cruft
+.DS_Store
+
+# Logs
+npm-debug.log*

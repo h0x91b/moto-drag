@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3 DevKit (USB CDC/`/dev/cu.usbmodem*`). Iterate in small steps so track tests stay predictable, and keep ESP32-WROOM-32 notes around for when we return to the HUB75 panel.
+This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3 DevKit (USB CDC/`/dev/cu.usbmodem*`). Iterate in small steps so track tests stay predictable, keep ESP32-WROOM-32 notes for the HUB75 panel, and build SPA assets out of the `web/` workspace with strict mobile-first layouts (phones and paddock tablets are the only clients in the field).
 
 ## Project Context
 
@@ -11,6 +11,7 @@ This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3
 ## Architecture Overview
 
 - `src/main.cpp` bootstraps SPIFFS, the HTTP server, and the blink loop; extend it with helper functions instead of crowding `loop()`. Mind the ESP32-C3 pinout (GPIO8 is the onboard LED, ADCs start at GPIO0/1); keep older WROOM wiring comments in each module if they still apply.
+- `web/` holds the Vite workspace for SPA pages (pure JS + CSS). `data/` only stores built artifacts copied from `web/dist`; commit the built payloads so flashing works even without Node locally.
 - Static assets reside under `data/` and are flashed with `pio run -t uploadfs`; treat it as the SPA root.
 - Ride snapshots live in typed structs backed by `std::vector` containers (capped at 10 laps each, 100 rides total) and serialize through ArduinoJson; follow that pattern when expanding the API surface.
 
@@ -23,7 +24,7 @@ This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3
 
 ## Project Structure & Module Organization
 
-- `platformio.ini` defines the lone `esp32c3` environment (monitor/upload on `/dev/cu.usbmodem*`); add new environments only when testing alternate boards.
+- `platformio.ini` defines the lone `esp32c3` environment (monitor/upload on `/dev/cu.usbmodem*`); add new environments only when testing alternate boards. `web/package.json` drives the SPA tooling (`npm run dev`, `npm run sync`).
 - Place shared headers in `include/` and reusable modules under `lib/`; document wiring assumptions near each entrypoint.
 - Store calibration blobs or seed datasets alongside the SPA in `data/` so they ride with filesystem flashes.
 
@@ -32,6 +33,24 @@ This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3
 - `pio run` compiles firmware; warnings must be resolved before merge.
 - `pio run -t upload` builds and flashes the ESP32-C3 DevKit; set `upload_port` if auto-detect fails (default `/dev/cu.usbmodem*`).
 - `pio device monitor --baud 115200` tails serial logs; open it before resetting the board to capture boot notes.
+- SPA loop:
+  - `cd web && npm run dev` for local development (mocked API responses, hot reload, fully offline).
+  - `npm run sync` builds + copies `web/dist` into the repo `data/` folder so `pio run -t uploadfs` can flash the assets.
+  - Keep runtime logic dependency-free (vanilla JS + CSS) so it works without internet connections once hosted on the bike.
+  - Layouts must read clearly at 360–414 px widths, with touch targets ≥44 px and safe-area padding for notches.
+
+## SPA Pages
+
+### Mobile-first requirements
+
+- All views must boot instantly on device APs with no WAN access, using only bundled fonts/assets.
+- Primary controls should sit near the top and/or within reach of thumbs (consider sticky quick actions).
+- Respect `env(safe-area-inset-*)` for notched displays, allow system dark-mode contrast, and keep animations subtle for shaky pit-lane scenarios.
+- Test interactions in portrait first; landscape/tablet tweaks come second.
+
+- **First-run admin wizard** (`web/src/main.js`): capture track name & lap goal, trigger sensor calibration, and push the phone clock to the module. Persists values in `localStorage` for offline bench work, POSTs to `/api/admin/setup`, `/api/sensors/calibrate`, `/api/time/sync`, and exposes quick-thumb action buttons for mobile users.
+- **Live laps** (legacy static page from `data/index.html`) consumes `/api/last.json`; port it into the Vite workspace as a dedicated view before layering admin-only tools there.
+- Upcoming: calibration re-run page, race readiness form (`moto.local`), rider history (“My Rides”), and leaderboards (“Топы”). Follow the Vite workflow, serve every page offline-first, and keep sensors/admin tooling under `/admin/*`.
 
 ## Coding Style & Naming Conventions
 
@@ -58,7 +77,7 @@ This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3
 ### Чеклист
 
 - [x] Описаны актуальные пользовательские истории и критерии (см. `docs/user_stories_ru.md`).
-- [ ] Реализовать мастер первой настройки (админ, название трассы, синхронизация времени, калибровка одного/двух лучей).
+- [ ] Реализовать мастер первой настройки (админ, название трассы, синхронизация времени, калибровка одного/двух лучей) — UI scaffolding готово в `web/`, связать с реальными API.
 - [ ] Добавить повторный доступ к калибровке и переключению режима лучей в админ-интерфейсе.
 - [ ] Реализовать веб-форму гонки (`moto.local`) с вводом имени, режима, количества кругов и кнопкой «Готов».
 - [ ] Настроить обработку лазерных датчиков: старт по первому импульсу, игнорирование заднего колеса, поддержка двух лучей.
