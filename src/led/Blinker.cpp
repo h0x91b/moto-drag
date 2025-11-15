@@ -27,7 +27,7 @@ namespace led
   {
     pinMode(static_cast<uint8_t>(kLedPin), OUTPUT);
     digitalWrite(static_cast<uint8_t>(kLedPin), LOW);
-    Serial.printf("[BLINK] Built-in LED configured on GPIO%d\n", static_cast<int>(kLedPin));
+    // Serial.printf("[BLINK] Built-in LED configured on GPIO%d\n", static_cast<int>(kLedPin));
   }
 
   void tickBlinker(unsigned long now)
@@ -41,10 +41,10 @@ namespace led
     digitalWrite(static_cast<uint8_t>(kLedPin), ledState ? HIGH : LOW);
     lastToggleAt = now;
 
-    if (Serial)
-    {
-      Serial.printf("[BLINK] GPIO%d -> %s\n", static_cast<int>(kLedPin), ledState ? "ON" : "OFF");
-    }
+    // if (Serial)
+    // {
+    //   Serial.printf("[BLINK] GPIO%d -> %s\n", static_cast<int>(kLedPin), ledState ? "ON" : "OFF");
+    // }
   }
 
   gpio_num_t blinkPin()

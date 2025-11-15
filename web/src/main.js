@@ -1,13 +1,9 @@
 import "./style.css";
 
-const APP_STORAGE_KEY = "moto-drag-admin";
-const CALIBRATION_KEY = "moto-drag-calibration";
-const CLOCK_KEY = "moto-drag-clock-sync";
 const API_TIMEOUT_MS = 5000;
+const DEV_BOARD_BOOT_KEY = "moto-drag/dev-board-boot-at";
 
 const app = document.querySelector("#app");
-
-const sessionStore = window.sessionStorage;
 
 const template = `
   <div class="shell">
@@ -48,7 +44,7 @@ const template = `
           </label>
 
           <button class="btn btn-primary" type="submit">
-            Save &amp; continue
+            Save to module
           </button>
           <div class="inline-status" data-state="idle" data-ref="profileStatus">Waiting for input…</div>
         </form>
@@ -74,7 +70,6 @@ const template = `
         <div class="actions">
           <button class="btn btn-outline" type="button" data-action="sync-clock">
             Send current time
-            <span data-ref="clockPreview"></span>
           </button>
           <div class="inline-status" data-state="idle" data-ref="clockStatus">
             Awaiting sync
@@ -114,6 +109,20 @@ const template = `
 
 app.innerHTML = template;
 
+const devBoardBootAt = (() => {
+  try {
+    const stored = localStorage.getItem(DEV_BOARD_BOOT_KEY);
+    if (stored && Number.isFinite(Number(stored))) {
+      return Number(stored);
+    }
+    const now = Date.now();
+    localStorage.setItem(DEV_BOARD_BOOT_KEY, String(now));
+    return now;
+  } catch {
+    return Date.now();
+  }
+})();
+
 const refs = {
   profileForm: app.querySelector('[data-form="profile"]'),
   profileStatus: app.querySelector('[data-ref="profileStatus"]'),
@@ -121,9 +130,6 @@ const refs = {
   calibrationMeta: app.querySelector('[data-ref="calibrationMeta"]'),
   clockStatus: app.querySelector('[data-ref="clockStatus"]'),
   clockMeta: app.querySelector('[data-ref="clockMeta"]'),
-  clockPreviewTargets: Array.from(
-    app.querySelectorAll('[data-ref="clockPreview"]')
-  ),
   connectionPill: app.querySelector('[data-ref="connection"]'),
   toast: app.querySelector(".toast"),
   nextStep: app.querySelector('[data-ref="nextStep"]'),
@@ -136,21 +142,12 @@ const progressRefs = {
 };
 
 const state = {
-  profile: loadSession(APP_STORAGE_KEY, {
-    trackName: "",
-    lapGoal: "",
-    updatedAt: null,
-  }),
-  calibration: loadSession(CALIBRATION_KEY, { completedAt: null }),
-  clock: loadSession(CLOCK_KEY, { syncedAt: null }),
+  profile: { trackName: "", lapGoal: "", updatedAt: null },
+  calibration: { completedAt: null },
+  clock: { syncedAt: null, syncedMillis: null, hostCapturedAt: null },
 };
 
-hydrateProfile();
-hydrateMeta();
-refreshProgress();
-updateClockPreview();
-updateConnectionIndicator();
-handleClockSync(true);
+bootstrap();
 
 refs.profileForm.addEventListener("submit", handleProfileSubmit);
 refs.profileForm.addEventListener("input", handleProfileDraft);
@@ -159,7 +156,19 @@ bindActionButtons("sync-clock", handleClockSync);
 
 window.addEventListener("online", updateConnectionIndicator);
 window.addEventListener("offline", updateConnectionIndicator);
-setInterval(updateClockPreview, 1000);
+setInterval(() => {
+  renderClockMeta();
+}, 1000);
+
+async function bootstrap() {
+  setInlineStatus(refs.profileStatus, "Loading from module…", "idle");
+  await refreshStateFromServer();
+  hydrateProfile();
+  hydrateMeta();
+  refreshProgress();
+  updateConnectionIndicator();
+  handleClockSync(true);
+}
 
 function handleProfileSubmit(event) {
   event.preventDefault();
@@ -191,10 +200,9 @@ function handleProfileSubmit(event) {
       if (!result.ok) throw result.error;
       state.profile = {
         trackName,
-        lapGoal: String(lapGoal),
+        lapGoal,
         updatedAt: payload.updatedAt,
       };
-      saveSession(APP_STORAGE_KEY, state.profile);
       setInlineStatus(refs.profileStatus, "Profile saved on module", "success");
       showToast("Track profile saved");
       refreshProgress();
@@ -222,12 +230,10 @@ function handleProfileDraft(event) {
     ...state.profile,
     [name]: value,
   };
-  saveSession(APP_STORAGE_KEY, state.profile);
-
   if (!state.profile.updatedAt) {
     setInlineStatus(
       refs.profileStatus,
-      "Draft stored locally (not saved on module)",
+      "Draft not saved on module yet",
       "idle"
     );
   }
@@ -239,7 +245,6 @@ function handleCalibration() {
     .then((result) => {
       if (!result.ok) throw result.error;
       state.calibration = { completedAt: Date.now() };
-      saveSession(CALIBRATION_KEY, state.calibration);
       setInlineStatus(refs.calibrationStatus, "Calibration stored", "success");
       hydrateMeta();
       refreshProgress();
@@ -254,8 +259,10 @@ function handleCalibration() {
 
 function handleClockSync(fromAuto = false) {
   const now = new Date();
+  const boardMillis = sampleBoardMillis();
   const payload = {
     epochMs: now.getTime(),
+    millis: boardMillis,
     iso8601: now.toISOString(),
     tzOffsetMinutes: now.getTimezoneOffset() * -1,
   };
@@ -267,8 +274,14 @@ function handleClockSync(fromAuto = false) {
   sendCommand("/api/time/sync", payload)
     .then((result) => {
       if (!result.ok) throw result.error;
-      state.clock = { syncedAt: Date.now() };
-      saveSession(CLOCK_KEY, state.clock);
+      const response = result.data || {};
+      state.clock = {
+        syncedAt: response.syncedAt ?? payload.epochMs,
+        syncedMillis: response.syncedMillis ?? boardMillis,
+        hostCapturedAt: response.hostCapturedAt ?? Date.now(),
+        moduleTimeMs: response.moduleTimeMs ?? null,
+        moduleMillis: response.moduleMillis ?? null,
+      };
       setInlineStatus(
         refs.clockStatus,
         fromAuto ? "Clock auto-synced" : "Clock updated",
@@ -297,7 +310,7 @@ function hydrateProfile() {
   } else if (state.profile.trackName || state.profile.lapGoal) {
     setInlineStatus(
       refs.profileStatus,
-      "Draft stored locally (not saved on module)",
+      "Draft not saved on module yet",
       "idle"
     );
   }
@@ -308,13 +321,36 @@ function hydrateMeta() {
     ? `Last run ${formatTimestamp(state.calibration.completedAt)}`
     : "No calibration data yet.";
 
-  refs.clockMeta.textContent = state.clock.syncedAt
-    ? `Synced ${formatTimestamp(state.clock.syncedAt)}`
-    : "Clock has never been synced.";
+  renderClockMeta();
+}
+
+async function refreshStateFromServer() {
+  try {
+    const data = await fetchJson("/api/admin/state");
+    state.profile = {
+      trackName: data.trackName ?? "",
+      lapGoal: data.lapGoal ?? "",
+      updatedAt: data.updatedAt ?? null,
+    };
+    state.calibration = { completedAt: data.calibrationAt ?? null };
+    state.clock = {
+      syncedAt: data.clockSyncedAt ?? null,
+      syncedMillis: data.clockSyncedMillis ?? null,
+      hostCapturedAt: data.clockSyncedHostAt ?? null,
+      moduleTimeMs: data.moduleTimeMs ?? null,
+      moduleMillis: data.moduleMillis ?? null,
+    };
+  } catch (error) {
+    console.warn(error);
+    setInlineStatus(refs.profileStatus, "Failed to load module state", "error");
+  }
 }
 
 function refreshProgress() {
-  const profileDone = Boolean(state.profile.trackName && state.profile.lapGoal);
+  const lapGoalValue = Number(state.profile.lapGoal);
+  const profileDone = Boolean(
+    state.profile.updatedAt && state.profile.trackName && lapGoalValue >= 1
+  );
   const calibrationDone = Boolean(state.calibration.completedAt);
   const clockDone = Boolean(state.clock.syncedAt);
   toggleProgress(progressRefs.profile, profileDone);
@@ -330,21 +366,6 @@ function toggleProgress(element, done) {
 function setInlineStatus(target, message, stateName) {
   target.dataset.state = stateName;
   target.textContent = message;
-}
-
-function updateClockPreview() {
-  if (!refs.clockPreviewTargets.length) {
-    return;
-  }
-  const now = new Date();
-  const formatted = now.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  refs.clockPreviewTargets.forEach((node) => {
-    node.textContent = `(${formatted})`;
-  });
 }
 
 function bindActionButtons(action, handler) {
@@ -394,23 +415,6 @@ function handleNextStep() {
   showToast("Next page coming soon — stay tuned!");
 }
 
-function loadSession(key, fallback) {
-  try {
-    const raw = sessionStore.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveSession(key, value) {
-  try {
-    sessionStore.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore quota errors; admin can refresh and continue
-  }
-}
-
 function formatTimestamp(timestamp) {
   try {
     const date = new Date(timestamp);
@@ -421,6 +425,8 @@ function formatTimestamp(timestamp) {
     const time = date.toLocaleTimeString(undefined, {
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
     });
     return `${day} at ${time}`;
   } catch {
@@ -429,11 +435,6 @@ function formatTimestamp(timestamp) {
 }
 
 async function sendCommand(path, body) {
-  if (isMocked()) {
-    await delay(500);
-    return { ok: true, mocked: true };
-  }
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
@@ -463,11 +464,79 @@ function safeJson(response) {
     : Promise.resolve({});
 }
 
-function isMocked() {
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
+async function fetchJson(path) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    const response = await fetch(path, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `HTTP ${response.status}`);
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sampleBoardMillis() {
+  return Math.max(0, Date.now() - devBoardBootAt);
+}
+
+function renderClockMeta() {
+  if (!refs.clockMeta) {
+    return;
+  }
+  if (!state.clock.syncedAt) {
+    refs.clockMeta.textContent = "Clock has never been synced.";
+    return;
+  }
+  const snapshot = getModuleClockSnapshot();
+  const clockNow = formatClockTime(snapshot?.epochMs ?? state.clock.syncedAt);
+  const hintParts = [`Synced ${formatTimestamp(state.clock.syncedAt)}`];
+  if (typeof snapshot?.millis === "number") {
+    hintParts.push(`${Math.round(snapshot.millis)} ms`);
+  }
+  refs.clockMeta.innerHTML = `
+    <div class="clock-readout">${clockNow}</div>
+    <div class="clock-hint">${hintParts.join(" • ")}</div>
+  `;
+}
+
+function getModuleClockSnapshot() {
+  if (!state.clock.syncedAt) {
+    return null;
+  }
+  const anchorHost =
+    typeof state.clock.hostCapturedAt === "number"
+      ? state.clock.hostCapturedAt
+      : Date.now();
+  const elapsed = Math.max(0, Date.now() - anchorHost);
+  const epochMs = state.clock.syncedAt + elapsed;
+  const millis =
+    typeof state.clock.syncedMillis === "number"
+      ? state.clock.syncedMillis + elapsed
+      : null;
+  return { epochMs, millis };
+}
+
+function formatClockTime(timestamp) {
+  try {
+    return new Date(timestamp).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return "--:--:--";
+  }
 }

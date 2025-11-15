@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+> ⚠️ **Discipline check:** Every time work starts or finishes, review this file and `TODO.md`. Keep both updated so the hardware and SPA workflows never drift from reality.
+
 This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3 DevKit (USB CDC/`/dev/cu.usbmodem*`). Iterate in small steps so track tests stay predictable, keep ESP32-WROOM-32 notes for the HUB75 panel, and build SPA assets out of the `web/` workspace with strict mobile-first layouts (phones and paddock tablets are the only clients in the field).
 
 ## Project Context
@@ -34,7 +36,8 @@ This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3
 - `pio run -t upload` builds and flashes the ESP32-C3 DevKit; set `upload_port` if auto-detect fails (default `/dev/cu.usbmodem*`).
 - `pio device monitor --baud 115200` tails serial logs; open it before resetting the board to capture boot notes.
 - SPA loop:
-  - `cd web && npm run dev` for local development (mocked API responses, hot reload, fully offline).
+  - `cd web && npm run dev:api` to boot the local Express dev API (`web/dev-server/server.mjs`). Set `MOTO_DEV_API_PORT` to override the default `5174`.
+  - `npm run dev` for UI development, or `npm run dev:full` to launch the API dev server and Vite together (requires `npm-run-all`).
   - `npm run sync` builds + copies `web/dist` into the repo `data/` folder so `pio run -t uploadfs` can flash the assets.
   - Keep runtime logic dependency-free (vanilla JS + CSS) so it works without internet connections once hosted on the bike.
   - Layouts must read clearly at 360–414 px widths, with touch targets ≥44 px and safe-area padding for notches.
@@ -48,7 +51,7 @@ This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3
 - Respect `env(safe-area-inset-*)` for notched displays, allow system dark-mode contrast, and keep animations subtle for shaky pit-lane scenarios.
 - Test interactions in portrait first; landscape/tablet tweaks come second.
 
-- **First-run admin wizard** (`web/src/main.js`): capture track name & lap goal, trigger sensor calibration, and push the phone clock to the module. Persists values in `localStorage` for offline bench work, POSTs to `/api/admin/setup`, `/api/sensors/calibrate`, `/api/time/sync`, and exposes quick-thumb action buttons for mobile users.
+- **First-run admin wizard** (`web/src/main.js`): capture track name & lap goal, trigger sensor calibration, and push the phone clock to the module. Loads the current config from `/api/admin/state`, POSTs to `/api/admin/setup`, `/api/sensors/calibrate`, `/api/time/sync`, and exposes quick-thumb action buttons for mobile users.
 - **Live laps** (legacy static page from `data/index.html`) consumes `/api/last.json`; port it into the Vite workspace as a dedicated view before layering admin-only tools there.
 - Upcoming: calibration re-run page, race readiness form (`moto.local`), rider history (“My Rides”), and leaderboards (“Топы”). Follow the Vite workflow, serve every page offline-first, and keep sensors/admin tooling under `/admin/*`.
 
@@ -73,14 +76,4 @@ This repo hosts firmware for the moto-drag lap timer now running on the ESP32-C3
 ## ТЗ и статус
 
 - ТЗ по пользовательским историям: `docs/user_stories_ru.md`.
-
-### Чеклист
-
-- [x] Описаны актуальные пользовательские истории и критерии (см. `docs/user_stories_ru.md`).
-- [ ] Реализовать мастер первой настройки (админ, название трассы, синхронизация времени, калибровка одного/двух лучей) — UI scaffolding готово в `web/`, связать с реальными API.
-- [ ] Добавить повторный доступ к калибровке и переключению режима лучей в админ-интерфейсе.
-- [ ] Реализовать веб-форму гонки (`moto.local`) с вводом имени, режима, количества кругов и кнопкой «Готов».
-- [ ] Настроить обработку лазерных датчиков: старт по первому импульсу, игнорирование заднего колеса, поддержка двух лучей.
-- [ ] Обновлять LED-панель: отображать `00:00.000` до старта, обновлять таймер каждые 100 мс, показывать результат бегущей строкой, поддержать кнопку сброса.
-- [ ] Хранить заезды в SPIFFS как дневные бинарные журналы (MessagePack/CBOR) с короткими ключами и идентификаторами пилотов/трасс, реализовать справочники, разделы «Мои заезды»/«Топы» и выгрузку архива.
-- [ ] Перенести HUB75-панель на ESP32 или ESP32-S3. Текущая ESP32-C3 сборка работает без матрицы (ждём подходящую плату, библиотека `ESP32-HUB75-MatrixPanel-I2S-DMA` не поддерживает C3/I2S DMA).
+- Живой список задач и больших блокеров хранится в `TODO.md`; обновляй его вместе с итоговыми заметками в этом документе.

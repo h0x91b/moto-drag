@@ -355,6 +355,19 @@ input:focus {
   margin-top: 8px;
 }
 
+.clock-readout {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #f8fafc;
+}
+
+.clock-hint {
+  font-size: 0.8rem;
+  color: rgba(148, 163, 184, 0.7);
+  margin-top: 2px;
+}
+
 @media (max-width: 640px) {
   body {
     padding: 24px 16px calc(48px + env(safe-area-inset-bottom, 0px));
