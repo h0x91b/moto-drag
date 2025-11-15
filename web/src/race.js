@@ -50,6 +50,7 @@ const template = `
 
     <section class="card timer-card" data-section="timer">
       <h2>Лайв-таймер</h2>
+      <p class="track-occupant" data-ref="trackOccupant" hidden></p>
       <div class="timer-face">
         <div class="timer-display" data-ref="timerValue">00:00.000</div>
       </div>
@@ -67,6 +68,7 @@ const template = `
     </section>
 
     <footer class="compact-footer" data-section="footer">
+      <button class="btn btn-primary btn-return" type="button" data-action="return" hidden>Вернуться к ожиданию</button>
       <button class="btn btn-outline btn-reset" type="button" data-action="reset" disabled>Сброс</button>
     </footer>
   </div>
@@ -82,12 +84,14 @@ const refs = {
   lapGoalLabel: app.querySelector('[data-ref="lapGoalLabel"]'),
   timerValue: app.querySelector('[data-ref="timerValue"]'),
   timerStateLabel: app.querySelector('[data-ref="timerStateLabel"]'),
+  trackOccupant: app.querySelector('[data-ref="trackOccupant"]'),
   statusMessage: app.querySelector('[data-ref="statusMessage"]'),
   linkStatus: app.querySelector('[data-ref="linkStatus"]'),
   lapsList: app.querySelector('[data-ref="lapsList"]'),
   nameInput: app.querySelector("#riderName"),
   readyBtn: app.querySelector('[data-action="ready"]'),
   resetBtn: app.querySelector('[data-action="reset"]'),
+  returnBtn: app.querySelector('[data-action="return"]'),
   adminLink: app.querySelector('[data-action="goto-admin"]'),
   leaderboardLink: app.querySelector('[data-action="goto-leaderboard"]'),
   toast: app.querySelector(".toast"),
@@ -113,13 +117,17 @@ const state = {
     laps: [],
     currentTimerMs: 0,
     snapshotAt: Date.now(),
+    lastLapMark: null,
   },
+  pendingResult: null,
+  acknowledgedResultStamp: null,
 };
 
 refs.nameInput.value = state.riderName;
 refs.nameInput.addEventListener("input", handleNameInput);
 refs.readyBtn.addEventListener("click", handleReady);
 refs.resetBtn.addEventListener("click", handleReset);
+refs.returnBtn.addEventListener("click", handleReturnToIdle);
 refs.adminLink?.addEventListener("click", () =>
   handleNavigate("/", "Возвращаемся к настройкам…")
 );
@@ -154,6 +162,11 @@ function handleNameInput(event) {
 }
 
 async function handleReady() {
+  if (isPendingResultMine()) {
+    clearPendingResult();
+    return;
+  }
+
   if (state.trackLock.locked) {
     showToast("Трек уже занят — дождись окончания", "error");
     return;
@@ -169,7 +182,7 @@ async function handleReady() {
   showToast("Бронируем трек…");
   try {
     const response = await postJson("/api/race/lock", { riderName });
-    showToast("Трек забронирован — ждём стартовый луч");
+    showToast("Трек забронирован — ждём стартовый луч", "success");
     applyRaceStatus(response?.state);
   } catch (error) {
     if (error?.status === 409) {
@@ -199,7 +212,7 @@ async function handleReset() {
   showToast("Останавливаем заезд…");
   try {
     const response = await postJson("/api/race/reset", {});
-    showToast("Трек освобождён");
+    showToast("Трек освобождён", "success");
     applyRaceStatus(response?.state);
   } catch (error) {
     console.warn("[Race] reset failed", error);
@@ -207,6 +220,19 @@ async function handleReset() {
   } finally {
     updateLockUi();
   }
+}
+
+function handleReturnToIdle() {
+  if (!isPendingResultMine()) {
+    showToast("Активный заезд ещё не завершён", "error");
+    return;
+  }
+  const stamp = getResultStamp(state.pendingResult);
+  if (stamp) {
+    state.acknowledgedResultStamp = stamp;
+  }
+  clearPendingResult();
+  showToast("Можно готовиться к следующему старту", "success");
 }
 
 function handleNavigate(path, toastMessage) {
@@ -242,18 +268,55 @@ function renderAdminSummary() {
 
 function applyRaceStatus(payload = {}) {
   const snapshotAt = Date.now();
+  const prevSnapshot = cloneTrackSnapshot(state.trackLock);
+  const wasLocked = state.trackLock.locked;
+  const wasOwner = isTrackOwnedByMe();
+
+  const laps = Array.isArray(payload?.laps) ? payload.laps : [];
+  const payloadResult = normalizeResult(payload?.lastResult);
+  const resultStamp = getResultStamp(payloadResult);
+  const isAckedResult =
+    Boolean(resultStamp) &&
+    Boolean(state.acknowledgedResultStamp) &&
+    state.acknowledgedResultStamp === resultStamp;
+  const resultBelongsToMe =
+    payloadResult &&
+    normalizeName(payloadResult.riderName) === normalizeName(state.riderName);
+
   state.trackLock = {
-    locked: Boolean(payload.locked),
-    riderName: payload.riderName || null,
-    lockedAt: toNullableNumber(payload.lockedAt),
-    startedAt: toNullableNumber(payload.startedAt),
-    laps: Array.isArray(payload.laps) ? payload.laps : [],
-    currentTimerMs: Number.isFinite(payload.currentTimerMs)
+    locked: Boolean(payload?.locked),
+    riderName: payload?.riderName || null,
+    lockedAt: toNullableNumber(payload?.lockedAt),
+    startedAt: toNullableNumber(payload?.startedAt),
+    laps,
+    lastLapMark: toNullableNumber(payload?.lastLapMark),
+    currentTimerMs: Number.isFinite(payload?.currentTimerMs)
       ? payload.currentTimerMs
       : 0,
     snapshotAt,
   };
-  state.currentRun.laps = state.trackLock.laps;
+
+  if (state.trackLock.locked) {
+    if (isTrackOwnedByMe()) {
+      state.acknowledgedResultStamp = null;
+    }
+    state.pendingResult = null;
+  } else if (resultBelongsToMe && !isAckedResult) {
+    state.pendingResult = payloadResult;
+  } else if (wasLocked && wasOwner && !payloadResult && !isAckedResult) {
+    state.pendingResult = snapshotToResult(prevSnapshot);
+  } else if (!resultBelongsToMe || isAckedResult) {
+    state.pendingResult = null;
+  }
+
+  if (state.trackLock.locked) {
+    state.currentRun.laps = laps.slice();
+  } else if (isPendingResultMine()) {
+    state.currentRun.laps = state.pendingResult?.laps?.slice() || [];
+  } else {
+    state.currentRun.laps = [];
+  }
+
   state.ready = isTrackOwnedByMe() && state.trackLock.locked;
   updateLayoutMode();
   updateLockUi();
@@ -262,24 +325,28 @@ function applyRaceStatus(payload = {}) {
 
 function updateLayoutMode() {
   if (!refs.shell) return;
-  refs.shell.setAttribute("data-mode", state.ready ? "compact" : "idle");
+  const compact =
+    state.trackLock.locked ||
+    state.ready ||
+    (isPendingResultMine() && Boolean(state.pendingResult));
+  refs.shell.setAttribute("data-mode", compact ? "compact" : "idle");
 }
 
 function updateLockUi() {
   const isLocked = state.trackLock.locked;
   const isOwner = isTrackOwnedByMe();
+  const hasResult = isPendingResultMine();
   const occupant = state.trackLock.riderName || "Без имени";
-
-  if (refs.readyBtn) {
-    refs.readyBtn.textContent = isLocked
-      ? isOwner
-        ? "Трек занят вами"
-        : "Трек занят"
-      : "Занять трек";
-    refs.readyBtn.disabled = isLocked;
+  if (refs.returnBtn) {
+    refs.returnBtn.hidden = true;
+    refs.returnBtn.disabled = true;
   }
 
   if (isLocked) {
+    if (refs.readyBtn) {
+      refs.readyBtn.textContent = isOwner ? "Трек занят вами" : "Трек занят";
+      refs.readyBtn.disabled = true;
+    }
     refs.timerStateLabel.textContent = isOwner
       ? "Сенсор ждёт старт"
       : `Трек занят: ${occupant}`;
@@ -289,14 +356,51 @@ function updateLockUi() {
     if (refs.resetBtn) {
       refs.resetBtn.disabled = !isOwner;
     }
-  } else {
-    refs.timerStateLabel.textContent = "Ожидание сигнала";
+    const occupantLabel = (isOwner ? state.riderName : occupant) || "Без имени";
+    updateTrackOccupant(
+      isOwner
+        ? `Вы на трассе: ${occupantLabel}`
+        : `Трек занят: ${occupantLabel}`,
+      isOwner ? "owner" : "warning"
+    );
+  } else if (hasResult) {
+    if (refs.readyBtn) {
+      refs.readyBtn.textContent = "Вернуться к ожиданию";
+      refs.readyBtn.disabled = false;
+    }
+    if (refs.returnBtn) {
+      refs.returnBtn.hidden = false;
+      refs.returnBtn.disabled = false;
+    }
+    refs.timerStateLabel.textContent = "Заезд завершён";
     refs.statusMessage.textContent =
-      "Займи трек только когда стоишь у старта.";
+      "Посмотри на круги и вернись, когда готов к следующему старту.";
     if (refs.resetBtn) {
       refs.resetBtn.disabled = true;
     }
+    const riderName = state.pendingResult?.riderName || state.riderName;
+    updateTrackOccupant(`Результат: ${riderName}`, "success");
+  } else {
+    refs.timerStateLabel.textContent = "Ожидание сигнала";
+    refs.statusMessage.textContent = "Займи трек только когда стоишь у старта.";
+    if (refs.resetBtn) {
+      refs.resetBtn.disabled = true;
+    }
+    if (refs.readyBtn) {
+      refs.readyBtn.textContent = "Занять трек";
+      refs.readyBtn.disabled = false;
+    }
+    updateTrackOccupant("", "idle", { hidden: true });
   }
+}
+
+function updateTrackOccupant(text, tone, options = {}) {
+  if (!refs.trackOccupant) return;
+  refs.trackOccupant.textContent = text || "";
+  refs.trackOccupant.dataset.tone = tone || "idle";
+  const shouldHide =
+    typeof options.hidden === "boolean" ? options.hidden : !text;
+  refs.trackOccupant.hidden = shouldHide;
 }
 
 function isTrackOwnedByMe() {
@@ -309,14 +413,67 @@ function isTrackOwnedByMe() {
 }
 
 function normalizeName(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function isPendingResultMine() {
+  if (!state.pendingResult) {
+    return false;
+  }
+  return (
+    normalizeName(state.pendingResult.riderName) ===
+    normalizeName(state.riderName)
+  );
+}
+
+function clearPendingResult() {
+  state.pendingResult = null;
+  state.currentRun.laps = [];
+  setTimerDisplay(0);
+  updateLayoutMode();
+  updateLockUi();
+  renderCurrentRun();
+}
+
+function snapshotToResult(snapshot) {
+  return {
+    riderName: snapshot?.riderName || state.riderName,
+    laps: snapshot?.laps ? snapshot.laps.slice() : [],
+    totalMs: computeSnapshotTimer(snapshot),
+    finishedAt: Date.now(),
+  };
+}
+
+function normalizeResult(result) {
+  if (!result) return null;
+  return {
+    riderName: result.riderName || null,
+    laps: Array.isArray(result.laps) ? result.laps.slice() : [],
+    totalMs: Number.isFinite(result.totalMs) ? result.totalMs : 0,
+    finishedAt: result.finishedAt || Date.now(),
+  };
+}
+
+function getResultStamp(result) {
+  if (!result) return null;
+  if (result.finishedAt) return String(result.finishedAt);
+  if (Number.isFinite(result.totalMs)) return `ms:${result.totalMs}`;
+  if (Array.isArray(result.laps) && result.laps.length) {
+    return `laps:${result.laps.join(",")}`;
+  }
+  return null;
 }
 
 function renderCurrentRun() {
   const laps = state.currentRun.laps || [];
+  const hasResult = isPendingResultMine();
   if (!laps.length) {
     const occupantMessage = state.trackLock.locked
       ? `Заезд пилота ${state.trackLock.riderName || "без имени"} в процессе`
+      : hasResult
+      ? "Заезд завершён без кругов"
       : "Кругов ещё нет";
     refs.lapsList.innerHTML = `<li><span>${occupantMessage}</span><strong>—</strong></li>`;
     return;
@@ -348,13 +505,19 @@ function startTimerLoop() {
 }
 
 function computeTimerDisplay() {
-  if (!state.trackLock.locked) {
-    return 0;
+  if (state.trackLock.locked) {
+    if (typeof state.trackLock.startedAt !== "number") {
+      return 0;
+    }
+    const base = Number(state.trackLock.currentTimerMs) || 0;
+    const capturedAt = state.trackLock.snapshotAt || Date.now();
+    const delta = Math.max(0, Date.now() - capturedAt);
+    return base + delta;
   }
-  const base = Number(state.trackLock.currentTimerMs) || 0;
-  const capturedAt = state.trackLock.snapshotAt || Date.now();
-  const delta = Math.max(0, Date.now() - capturedAt);
-  return base + delta;
+  if (isPendingResultMine()) {
+    return state.pendingResult?.totalMs || 0;
+  }
+  return 0;
 }
 
 function setLinkStatus(isOnline) {
@@ -419,8 +582,45 @@ async function safeJson(response) {
 }
 
 function toNullableNumber(value) {
+  if (value === null || typeof value === "undefined") {
+    return null;
+  }
   const next = Number(value);
   return Number.isFinite(next) ? next : null;
+}
+
+function cloneTrackSnapshot(snapshot) {
+  if (!snapshot) {
+    return {
+      locked: false,
+      riderName: null,
+      lockedAt: null,
+      startedAt: null,
+      laps: [],
+      currentTimerMs: 0,
+      snapshotAt: Date.now(),
+    };
+  }
+  return {
+    locked: snapshot.locked,
+    riderName: snapshot.riderName,
+    lockedAt: snapshot.lockedAt,
+    startedAt: snapshot.startedAt,
+    laps: snapshot.laps ? snapshot.laps.slice() : [],
+    currentTimerMs: snapshot.currentTimerMs || 0,
+    snapshotAt: snapshot.snapshotAt || Date.now(),
+  };
+}
+
+function computeSnapshotTimer(snapshot) {
+  if (!snapshot) return 0;
+  const base = Number(snapshot.currentTimerMs) || 0;
+  if (!snapshot.locked) {
+    return base;
+  }
+  const capturedAt = snapshot.snapshotAt || Date.now();
+  const delta = Math.max(0, Date.now() - capturedAt);
+  return base + delta;
 }
 
 function loadStoredName() {

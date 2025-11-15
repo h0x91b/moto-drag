@@ -14,6 +14,14 @@ const DEFAULT_TRACK_LOCK = {
   lockedAt: null,
   startedAt: null,
   laps: [],
+  lastLapMark: null,
+};
+
+const DEFAULT_RESULT = {
+  riderName: null,
+  laps: [],
+  totalMs: 0,
+  finishedAt: null,
 };
 
 const DEFAULT_STATE = {
@@ -26,6 +34,7 @@ const DEFAULT_STATE = {
   rides: [],
   updatedAt: null,
   trackLock: DEFAULT_TRACK_LOCK,
+  lastResult: DEFAULT_RESULT,
 };
 
 const readState = () => {
@@ -43,6 +52,7 @@ const writeState = (nextState) => {
 
 const state = readState();
 state.trackLock = { ...DEFAULT_TRACK_LOCK, ...state.trackLock };
+state.lastResult = { ...DEFAULT_RESULT, ...state.lastResult };
 
 const moduleClockNow = () => {
   if (
@@ -72,14 +82,18 @@ function log(action, payload = {}) {
 
 const computeTimerMs = () => {
   if (!state.trackLock.locked) return 0;
-  const reference = state.trackLock.startedAt ?? state.trackLock.lockedAt;
-  if (typeof reference !== "number") return 0;
+  const reference =
+    typeof state.trackLock.startedAt === "number"
+      ? state.trackLock.startedAt
+      : null;
+  if (reference === null) return 0;
   return Math.max(0, Date.now() - reference);
 };
 
 const getRaceStatus = () => ({
   ...state.trackLock,
   currentTimerMs: computeTimerMs(),
+  lastResult: state.lastResult,
 });
 
 app.get("/api/last.json", (_req, res) => {
@@ -159,6 +173,85 @@ app.post("/api/time/sync", (req, res) => {
   }, 300);
 });
 
+const simTimers = new Set();
+
+const registerTimer = (timer) => {
+  simTimers.add(timer);
+  return timer;
+};
+
+const clearRaceSimulation = () => {
+  for (const timer of simTimers) {
+    clearTimeout(timer);
+  }
+  simTimers.clear();
+};
+
+const scheduleRaceSimulation = () => {
+  clearRaceSimulation();
+  state.lastResult = { ...DEFAULT_RESULT };
+  const triggerStart = () => {
+    if (!state.trackLock.locked) return;
+    const now = Date.now();
+    state.trackLock.startedAt = now;
+    state.trackLock.lastLapMark = now;
+    writeState(state);
+    log("[sim] race started", { rider: state.trackLock.riderName });
+    scheduleNextLap(1);
+  };
+  registerTimer(setTimeout(triggerStart, 2000));
+};
+
+const scheduleNextLap = (lapIndex) => {
+  const lapGoal = Math.max(1, Number(state.lapGoal) || 1);
+  if (lapIndex > lapGoal) {
+    finishRace();
+    return;
+  }
+  const delay = 5000 + Math.floor(Math.random() * 2000);
+  registerTimer(
+    setTimeout(() => {
+      if (!state.trackLock.locked) return;
+      const now = Date.now();
+      const lastMark =
+        state.trackLock.lastLapMark ??
+        state.trackLock.startedAt ??
+        state.trackLock.lockedAt ??
+        now;
+      const lapSeconds = Number(((now - lastMark) / 1000).toFixed(3));
+      state.trackLock.laps = [...state.trackLock.laps, lapSeconds];
+      state.trackLock.lastLapMark = now;
+      writeState(state);
+      log("[sim] lap completed", { lapIndex, lapSeconds });
+      if (lapIndex >= lapGoal) {
+        finishRace();
+      } else {
+        scheduleNextLap(lapIndex + 1);
+      }
+    }, delay)
+  );
+};
+
+const finishRace = () => {
+  if (state.trackLock.laps?.length) {
+    state.rides = state.rides || [];
+    state.rides.push([Date.now(), state.trackLock.laps]);
+    if (state.rides.length > 20) {
+      state.rides.shift();
+    }
+  }
+  state.lastResult = {
+    riderName: state.trackLock.riderName,
+    laps: state.trackLock.laps.slice(),
+    totalMs: computeTimerMs(),
+    finishedAt: Date.now(),
+  };
+  clearRaceSimulation();
+  state.trackLock = { ...DEFAULT_TRACK_LOCK };
+  writeState(state);
+  log("[sim] race finished");
+};
+
 app.post("/api/race/lock", (req, res) => {
   const riderName = String(req.body?.riderName || "").trim();
   if (!riderName) {
@@ -174,15 +267,25 @@ app.post("/api/race/lock", (req, res) => {
     locked: true,
     riderName,
     lockedAt: now,
-    startedAt: now,
+    startedAt: null,
     laps: [],
+    lastLapMark: null,
   };
   writeState(state);
+  scheduleRaceSimulation();
   log("POST /api/race/lock -> 200", state.trackLock);
   res.json({ ok: true, state: getRaceStatus() });
 });
 
 app.post("/api/race/reset", (_req, res) => {
+  const snapshot = getRaceStatus();
+  clearRaceSimulation();
+  state.lastResult = {
+    riderName: snapshot.riderName,
+    laps: snapshot.laps.slice(),
+    totalMs: computeTimerMs(),
+    finishedAt: Date.now(),
+  };
   state.trackLock = { ...DEFAULT_TRACK_LOCK };
   writeState(state);
   log("POST /api/race/reset -> 200");

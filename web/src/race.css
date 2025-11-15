@@ -117,6 +117,27 @@ body {
   line-height: 1.4;
 }
 
+.track-occupant {
+  margin: -0.25rem 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7dd7ff;
+}
+
+.track-occupant[data-tone="warning"] {
+  color: #ffd86b;
+}
+
+.track-occupant[data-tone="success"] {
+  color: #8df0ff;
+}
+
+.track-occupant[data-tone="owner"] {
+  color: #9fffa5;
+}
+
 .name-input-group {
   display: flex;
   flex-direction: column;
@@ -274,6 +295,8 @@ body {
 .compact-footer {
   display: none;
   margin-top: auto;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .compact-footer .btn-reset {
@@ -281,7 +304,7 @@ body {
 }
 
 .race-shell[data-mode="compact"] .compact-footer {
-  display: block;
+  display: flex;
 }
 
 .toast {
