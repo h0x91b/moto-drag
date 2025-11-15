@@ -1,0 +1,37 @@
+#include "app/LegacyFirmware.h"
+
+#include <Arduino.h>
+
+#include "display/MatrixPanel.h"
+#include "led/Blinker.h"
+#include "net/WebServerModule.h"
+#include "platform/SerialUtils.h"
+#include "sensors/LightSensor.h"
+#include "storage/Rides.h"
+
+namespace app
+{
+void legacySetup()
+{
+  Serial.begin(115200);
+  platform::waitForSerial();
+  Serial.println("\n[BOOT] ESP32-WROOM-32 ready with Wi-Fi access point");
+
+  led::initBlinker();
+  sensors::initLightSensor();
+  storage::seedRideHistory();
+  net::initNetwork();
+  display::initMatrixPanel();
+
+  Serial.println("[BOOT] Legacy firmware initialized (call legacyLoop() to run it)");
+}
+
+void legacyLoop()
+{
+  unsigned long now = millis();
+  led::tickBlinker(now);
+  sensors::tickLightSensor(now);
+  display::tickMatrixPanel(now);
+  net::tickNetwork();
+}
+} // namespace app

@@ -14,6 +14,13 @@ This repo hosts firmware for the moto-drag lap timer built on the ESP32-WROOM-32
 - Static assets reside under `data/` and are flashed with `pio run -t uploadfs`; treat it as the SPA root.
 - Ride snapshots live in typed structs backed by `std::vector` containers (capped at 10 laps each, 100 rides total) and serialize through ArduinoJson; follow that pattern when expanding the API surface.
 
+### Module Layout
+
+- Keep headers under `include/<feature>/FeatureName.h` and implementations under `src/<feature>/FeatureName.cpp`.
+- Current feature folders: `led/` (status LED routines), `sensors/` (photo/light inputs), `storage/` (ride history), `net/` (Wi-Fi + HTTP), `display/` (HUB75 panel), `app/` (legacy firmware entry points), and `platform/` (serial/bootstrap helpers).
+- Each module owns its GPIO definitions to avoid accidental cross-coupling. Document pin choices at the top of every module file.
+- New features follow the same pattern: create `include/<feature>/FeatureName.h` first, declare `init*()`/`tick*()` pairs, then implement them under `src/<feature>/FeatureName.cpp`. Wire them into `setup()`/`loop()` from `src/main.cpp`.
+
 ## Project Structure & Module Organization
 
 - `platformio.ini` defines the lone `esp32dev` environment plus serial speeds; add new environments only when testing alternate boards.
