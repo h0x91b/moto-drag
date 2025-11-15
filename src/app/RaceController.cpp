@@ -99,13 +99,23 @@ namespace app
       clearTrackLockState();
     }
 
+    uint64_t computeTimestampOrUptime(uint32_t nowMillis)
+    {
+      uint64_t moduleTime = computeModuleTime(nowMillis);
+      if (moduleTime == 0)
+      {
+        moduleTime = static_cast<uint64_t>(nowMillis);
+      }
+      return moduleTime;
+    }
+
     void startRace(uint32_t nowMillis)
     {
       raceStatus.running = true;
       raceStatus.readyForStart = false;
       raceStatus.lapArmed = false;
       raceStatus.startedAtMillis = nowMillis;
-      raceStatus.startedAt = computeModuleTime(nowMillis);
+      raceStatus.startedAt = computeTimestampOrUptime(nowMillis);
       raceStatus.lastLapMillis = nowMillis;
       raceStatus.lastLapAt = raceStatus.startedAt;
       lastActivityMillis = nowMillis;
@@ -129,7 +139,7 @@ namespace app
       float lapSeconds = roundLapSeconds(lapDuration);
       raceStatus.laps.push_back(lapSeconds);
       raceStatus.lastLapMillis = nowMillis;
-      raceStatus.lastLapAt = computeModuleTime(nowMillis);
+      raceStatus.lastLapAt = computeTimestampOrUptime(nowMillis);
       raceStatus.lapArmed = false;
       lastActivityMillis = nowMillis;
       Serial.printf("[Race] Lap %u for '%s': %.3f s\n",
@@ -248,7 +258,7 @@ namespace app
     raceStatus.riderName = riderName;
     raceStatus.laps.clear();
     raceStatus.lockedAtMillis = nowMillis;
-    raceStatus.lockedAt = computeModuleTime(nowMillis);
+    raceStatus.lockedAt = computeTimestampOrUptime(nowMillis);
     raceStatus.startedAt = 0;
     raceStatus.startedAtMillis = 0;
     raceStatus.lastLapAt = 0;
