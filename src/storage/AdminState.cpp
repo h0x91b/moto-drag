@@ -21,6 +21,11 @@ namespace storage
       adminState.lapGoal = 3;
       adminState.updatedAt = 0;
       adminState.calibrationAt = 0;
+      adminState.ambientLevel = 0;
+      adminState.ambientMin = 0;
+      adminState.ambientMax = 0;
+      adminState.ambientNoise = 0;
+      adminState.triggerDelta = 0;
       adminState.clockSyncedAt = 0;
       adminState.clockSyncedMillis = 0;
       adminState.clockSyncedHostAt = 0;
@@ -63,6 +68,11 @@ namespace storage
       doc["lapGoal"] = adminState.lapGoal;
       doc["updatedAt"] = adminState.updatedAt;
       doc["calibrationAt"] = adminState.calibrationAt;
+      doc["ambientLevel"] = adminState.ambientLevel;
+      doc["ambientMin"] = adminState.ambientMin;
+      doc["ambientMax"] = adminState.ambientMax;
+      doc["ambientNoise"] = adminState.ambientNoise;
+      doc["triggerDelta"] = adminState.triggerDelta;
       size_t bytes = serializeMsgPack(doc, file);
       file.flush();
       file.close();
@@ -122,6 +132,11 @@ namespace storage
       }
       adminState.updatedAt = doc["updatedAt"] | adminState.updatedAt;
       adminState.calibrationAt = doc["calibrationAt"] | adminState.calibrationAt;
+      adminState.ambientLevel = doc["ambientLevel"] | adminState.ambientLevel;
+      adminState.ambientMin = doc["ambientMin"] | adminState.ambientMin;
+      adminState.ambientMax = doc["ambientMax"] | adminState.ambientMax;
+      adminState.ambientNoise = doc["ambientNoise"] | adminState.ambientNoise;
+      adminState.triggerDelta = doc["triggerDelta"] | adminState.triggerDelta;
       adminState.clockSyncedAt = 0;
       adminState.clockSyncedMillis = 0;
       adminState.clockSyncedHostAt = 0;
@@ -156,11 +171,22 @@ namespace storage
     persistAdminStateInternal();
   }
 
-  void markCalibration(uint64_t completedAt)
+  void markCalibration(uint64_t completedAt, const CalibrationSnapshot &snapshot)
   {
     adminState.calibrationAt = completedAt;
+    adminState.ambientLevel = snapshot.ambientLevel;
+    adminState.ambientMin = snapshot.ambientMin;
+    adminState.ambientMax = snapshot.ambientMax;
+    adminState.ambientNoise = snapshot.ambientNoise;
+    adminState.triggerDelta = snapshot.triggerDelta;
     Serial.printf("[AdminState] Calibration timestamp stored: %llu\n",
                   static_cast<unsigned long long>(adminState.calibrationAt));
+    Serial.printf("[AdminState] Ambient=%u min=%u max=%u noise=%u delta=%u\n",
+                  adminState.ambientLevel,
+                  adminState.ambientMin,
+                  adminState.ambientMax,
+                  adminState.ambientNoise,
+                  adminState.triggerDelta);
     persistAdminStateInternal();
   }
 

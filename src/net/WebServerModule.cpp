@@ -8,6 +8,7 @@
 #include <WiFi.h>
 #include <ctime>
 
+#include "sensors/LightSensor.h"
 #include "storage/AdminState.h"
 #include "storage/Rides.h"
 
@@ -244,6 +245,23 @@ namespace net
       else
         doc["calibrationAt"] = nullptr;
 
+      if (state.calibrationAt)
+      {
+        doc["ambientLevel"] = state.ambientLevel;
+        doc["ambientMin"] = state.ambientMin;
+        doc["ambientMax"] = state.ambientMax;
+        doc["ambientNoise"] = state.ambientNoise;
+        doc["triggerDelta"] = state.triggerDelta;
+      }
+      else
+      {
+        doc["ambientLevel"] = nullptr;
+        doc["ambientMin"] = nullptr;
+        doc["ambientMax"] = nullptr;
+        doc["ambientNoise"] = nullptr;
+        doc["triggerDelta"] = nullptr;
+      }
+
       if (state.clockSyncedAt)
         doc["clockSyncedAt"] = state.clockSyncedAt;
       else
@@ -305,7 +323,7 @@ namespace net
       uint64_t updatedAt = resolveTimestampOrNow(doc["updatedAt"] | 0ULL, nowMillis);
       storage::updateTrackProfile(std::string(trackName.c_str()), static_cast<uint8_t>(lapGoal), updatedAt);
 
-      StaticJsonDocument<128> response;
+      StaticJsonDocument<256> response;
       response["ok"] = true;
       response["savedAt"] = updatedAt;
       sendJsonResponse(200, response);
@@ -320,13 +338,60 @@ namespace net
         return;
       }
 
+      uint32_t windowMs = doc["windowMs"] | 4000UL;
+      if (windowMs < 1000UL)
+      {
+        windowMs = 1000UL;
+      }
+      if (windowMs > 10000UL)
+      {
+        windowMs = 10000UL;
+      }
+
+      sensors::LightCalibrationStats stats{};
+      if (!sensors::captureLightCalibration(stats, windowMs))
+      {
+        sendJsonError(500, "Unable to sample sensor");
+        return;
+      }
+
+      constexpr uint16_t kMinDelta = 30;
+      uint32_t computedDelta = static_cast<uint32_t>(stats.noiseLevel) * 2U;
+      if (computedDelta < kMinDelta)
+      {
+        computedDelta = kMinDelta;
+      }
+      if (computedDelta > stats.averageValue)
+      {
+        computedDelta = stats.averageValue;
+      }
+
       uint32_t nowMillis = millis();
       uint64_t completedAt = resolveTimestampOrNow(doc["startedAt"] | 0ULL, nowMillis);
-      storage::markCalibration(completedAt);
+      storage::CalibrationSnapshot snapshot{
+          stats.averageValue,
+          stats.minValue,
+          stats.maxValue,
+          stats.noiseLevel,
+          static_cast<uint16_t>(computedDelta)};
+      storage::markCalibration(completedAt, snapshot);
 
-      StaticJsonDocument<128> response;
+      StaticJsonDocument<256> response;
       response["ok"] = true;
       response["completedAt"] = completedAt;
+      response["windowMs"] = windowMs;
+      response["samples"] = stats.sampleCount;
+      response["ambientLevel"] = snapshot.ambientLevel;
+      response["ambientMin"] = snapshot.ambientMin;
+      response["ambientMax"] = snapshot.ambientMax;
+      response["ambientNoise"] = snapshot.ambientNoise;
+      response["triggerDelta"] = snapshot.triggerDelta;
+      uint16_t threshold = 0;
+      if (snapshot.ambientLevel > snapshot.triggerDelta)
+      {
+        threshold = snapshot.ambientLevel - snapshot.triggerDelta;
+      }
+      response["triggerThreshold"] = threshold;
       sendJsonResponse(200, response);
     }
 
