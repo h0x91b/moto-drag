@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <ESPmDNS.h>
 #include <FS.h>
 #include <SPIFFS.h>
 #include <WebServer.h>
@@ -18,6 +19,7 @@ namespace net
   {
     constexpr char kApSsid[] = "moto-drag";
     constexpr uint16_t kHttpPort = 80;
+    constexpr char kMdnsHostName[] = "moto";
     constexpr size_t kJsonBufferSize = 4096;
     constexpr size_t kStateJsonBufferSize = 512;
     constexpr size_t kRequestJsonBufferSize = 512;
@@ -26,6 +28,7 @@ namespace net
 
     WebServer webServer(kHttpPort);
     bool serverReady = false;
+    bool mdnsReady = false;
     bool fsMounted = false;
     unsigned long lastClockLogAt = 0;
 
@@ -44,21 +47,21 @@ namespace net
       sendJsonResponse(status, doc);
     }
 
-  template <typename TDoc>
-  bool parseJsonBody(TDoc &doc, String *rawBody = nullptr)
-  {
-    if (!webServer.hasArg("plain"))
+    template <typename TDoc>
+    bool parseJsonBody(TDoc &doc, String *rawBody = nullptr)
     {
-      sendJsonError(400, "Missing body");
-      return false;
+      if (!webServer.hasArg("plain"))
+      {
+        sendJsonError(400, "Missing body");
+        return false;
       }
 
-    String body = webServer.arg("plain");
-    if (rawBody != nullptr)
-    {
-      *rawBody = body;
-    }
-    DeserializationError err = deserializeJson(doc, body);
+      String body = webServer.arg("plain");
+      if (rawBody != nullptr)
+      {
+        *rawBody = body;
+      }
+      DeserializationError err = deserializeJson(doc, body);
       if (err)
       {
         sendJsonError(400, "Invalid JSON");
@@ -293,17 +296,17 @@ namespace net
       sendJsonResponse(200, doc);
     }
 
-  void handleAdminSetup()
-  {
-    Serial.println("[HTTP] POST /api/admin/setup");
-    StaticJsonDocument<kRequestJsonBufferSize> doc;
-    String rawBody;
-    if (!parseJsonBody(doc, &rawBody))
+    void handleAdminSetup()
     {
-      return;
-    }
-    Serial.print("[HTTP] body /api/admin/setup: ");
-    Serial.println(rawBody);
+      Serial.println("[HTTP] POST /api/admin/setup");
+      StaticJsonDocument<kRequestJsonBufferSize> doc;
+      String rawBody;
+      if (!parseJsonBody(doc, &rawBody))
+      {
+        return;
+      }
+      Serial.print("[HTTP] body /api/admin/setup: ");
+      Serial.println(rawBody);
 
       String trackName = doc["trackName"] | "";
       trackName.trim();
@@ -315,9 +318,9 @@ namespace net
       int lapGoal = doc["lapGoal"] | 0;
       if (trackName.isEmpty() || lapGoal < 1 || lapGoal > 20)
       {
-      sendJsonError(400, "Invalid payload");
-      return;
-    }
+        sendJsonError(400, "Invalid payload");
+        return;
+      }
 
       uint32_t nowMillis = millis();
       uint64_t updatedAt = resolveTimestampOrNow(doc["updatedAt"] | 0ULL, nowMillis);
@@ -489,19 +492,53 @@ namespace net
       dumpFilesystem();
     }
 
-    void startAccessPoint()
+    bool startAccessPoint()
     {
       WiFi.mode(WIFI_AP);
+      WiFi.softAPsetHostname(kMdnsHostName);
       if (WiFi.softAP(kApSsid))
       {
         Serial.printf("[AP] started: %s\n", kApSsid);
         Serial.print("[AP] IP: ");
         Serial.println(WiFi.softAPIP());
+        return true;
       }
       else
       {
         Serial.println("[AP] failed to start");
+        return false;
       }
+    }
+
+    void startMdns()
+    {
+      if (mdnsReady)
+      {
+        return;
+      }
+
+      if (!MDNS.begin(kMdnsHostName))
+      {
+        Serial.println("[mDNS] failed to start responder");
+        return;
+      }
+
+      if (!MDNS.addService("http", "tcp", kHttpPort))
+      {
+        Serial.println("[mDNS] HTTP service registration failed");
+      }
+
+      IPAddress apIp = WiFi.softAPIP();
+      if (apIp)
+      {
+        String ipStr = apIp.toString();
+        Serial.printf("[mDNS] moto.local -> %s\n", ipStr.c_str());
+      }
+      else
+      {
+        Serial.println("[mDNS] moto.local registered (IP pending)");
+      }
+      mdnsReady = true;
     }
 
     void configureRoutes()
@@ -521,7 +558,11 @@ namespace net
   void initNetwork()
   {
     mountFilesystem();
-    startAccessPoint();
+    bool apReady = startAccessPoint();
+    if (apReady)
+    {
+      startMdns();
+    }
     configureRoutes();
     serverReady = true;
   }
