@@ -150,4 +150,14 @@ namespace sensors
                   stats.noiseLevel);
     return true;
   }
+
+  bool isBeamBroken()
+  {
+    return lastBeamBroken;
+  }
+
+  uint16_t getLastRawValue()
+  {
+    return lastRawValue;
+  }
 } // namespace sensors

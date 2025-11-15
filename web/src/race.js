@@ -282,6 +282,8 @@ function applyRaceStatus(payload = {}) {
     state.acknowledgedResultStamp === resultStamp;
   const resultBelongsToMe =
     payloadResult &&
+    hasRiderIdentity() &&
+    Boolean(payloadResult.riderName) &&
     normalizeName(payloadResult.riderName) === normalizeName(state.riderName);
 
   state.trackLock = {
@@ -405,7 +407,10 @@ function updateTrackOccupant(text, tone, options = {}) {
 }
 
 function isTrackOwnedByMe() {
-  if (!state.trackLock.locked) {
+  if (!state.trackLock.locked || !hasRiderIdentity()) {
+    return false;
+  }
+  if (!state.trackLock.riderName) {
     return false;
   }
   return (
@@ -419,8 +424,15 @@ function normalizeName(value) {
     .toLowerCase();
 }
 
+function hasRiderIdentity() {
+  return Boolean(state.riderName && state.riderName.trim().length);
+}
+
 function isPendingResultMine() {
-  if (!state.pendingResult) {
+  if (!state.pendingResult || !hasRiderIdentity()) {
+    return false;
+  }
+  if (!state.pendingResult.riderName) {
     return false;
   }
   return (

@@ -6,6 +6,8 @@ namespace sensors
 {
 void initLightSensor();
 void tickLightSensor(unsigned long now);
+bool isBeamBroken();
+uint16_t getLastRawValue();
 
 struct LightCalibrationStats
 {

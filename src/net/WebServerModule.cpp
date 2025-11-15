@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <ctime>
 
+#include "app/RaceController.h"
 #include "sensors/LightSensor.h"
 #include "storage/AdminState.h"
 #include "storage/Rides.h"
@@ -23,6 +24,7 @@ namespace net
     constexpr size_t kJsonBufferSize = 4096;
     constexpr size_t kStateJsonBufferSize = 512;
     constexpr size_t kRequestJsonBufferSize = 512;
+    constexpr size_t kRaceStatusJsonSize = 1024;
     constexpr unsigned long kClockLogIntervalMs = 10000;
     constexpr size_t kClockTimestampBufSize = 32;
 
@@ -228,6 +230,63 @@ namespace net
       {
         webServer.send(500, "text/plain", "index.html missing");
       }
+    }
+
+    void writeRaceStatus(JsonObject obj, uint32_t nowMillis)
+    {
+      const auto &status = app::getRaceStatus();
+      obj["locked"] = status.locked;
+      obj["running"] = status.running;
+      obj["readyForStart"] = status.readyForStart;
+      obj["lapArmed"] = status.lapArmed;
+
+      if (!status.riderName.empty())
+        obj["riderName"] = status.riderName.c_str();
+      else
+        obj["riderName"] = nullptr;
+
+      if (status.lockedAt)
+        obj["lockedAt"] = status.lockedAt;
+      else
+        obj["lockedAt"] = nullptr;
+
+      if (status.startedAt)
+        obj["startedAt"] = status.startedAt;
+      else
+        obj["startedAt"] = nullptr;
+
+      if (status.lastLapAt)
+        obj["lastLapMark"] = status.lastLapAt;
+      else
+        obj["lastLapMark"] = nullptr;
+
+      JsonArray laps = obj.createNestedArray("laps");
+      for (float lap : status.laps)
+      {
+        laps.add(lap);
+      }
+
+      obj["currentTimerMs"] = app::getCurrentTimerMs(nowMillis);
+
+      JsonObject lastResultObj = obj.createNestedObject("lastResult");
+      const auto &result = app::getLastResult();
+      lastResultObj["hasResult"] = result.hasResult;
+      if (!result.riderName.empty())
+        lastResultObj["riderName"] = result.riderName.c_str();
+      else
+        lastResultObj["riderName"] = nullptr;
+
+      JsonArray resultLaps = lastResultObj.createNestedArray("laps");
+      for (float lap : result.laps)
+      {
+        resultLaps.add(lap);
+      }
+
+      lastResultObj["totalMs"] = result.totalMs;
+      if (result.finishedAt)
+        lastResultObj["finishedAt"] = result.finishedAt;
+      else
+        lastResultObj["finishedAt"] = nullptr;
     }
 
     void handleAdminState()
@@ -463,6 +522,63 @@ namespace net
       webServer.send(200, "application/json", payload);
     }
 
+    void handleRaceStatus()
+    {
+      Serial.println("[HTTP] GET /api/race/status");
+      StaticJsonDocument<kRaceStatusJsonSize> doc;
+      JsonObject root = doc.to<JsonObject>();
+      uint32_t nowMillis = millis();
+      writeRaceStatus(root, nowMillis);
+      sendJsonResponse(200, doc);
+    }
+
+    void handleRaceLock()
+    {
+      Serial.println("[HTTP] POST /api/race/lock");
+      StaticJsonDocument<kRequestJsonBufferSize> doc;
+      if (!parseJsonBody(doc))
+      {
+        return;
+      }
+
+      String riderName = doc["riderName"] | "";
+      riderName.trim();
+      if (riderName.isEmpty())
+      {
+        sendJsonError(400, "Missing riderName");
+        return;
+      }
+
+      uint32_t nowMillis = millis();
+      if (!app::lockTrack(std::string(riderName.c_str()), nowMillis))
+      {
+        StaticJsonDocument<kRaceStatusJsonSize> conflictDoc;
+        conflictDoc["error"] = "Track already locked";
+        JsonObject state = conflictDoc.createNestedObject("state");
+        writeRaceStatus(state, nowMillis);
+        sendJsonResponse(409, conflictDoc);
+        return;
+      }
+
+      StaticJsonDocument<kRaceStatusJsonSize> response;
+      response["ok"] = true;
+      JsonObject state = response.createNestedObject("state");
+      writeRaceStatus(state, nowMillis);
+      sendJsonResponse(200, response);
+    }
+
+    void handleRaceReset()
+    {
+      Serial.println("[HTTP] POST /api/race/reset");
+      uint32_t nowMillis = millis();
+      bool reset = app::resetTrack(nowMillis);
+      StaticJsonDocument<kRaceStatusJsonSize> response;
+      response["ok"] = reset;
+      JsonObject state = response.createNestedObject("state");
+      writeRaceStatus(state, nowMillis);
+      sendJsonResponse(200, response);
+    }
+
     void handleNotFound()
     {
       Serial.print("[HTTP] 404 ");
@@ -549,6 +665,9 @@ namespace net
       webServer.on("/api/admin/setup", HTTP_POST, handleAdminSetup);
       webServer.on("/api/sensors/calibrate", HTTP_POST, handleSensorsCalibrate);
       webServer.on("/api/time/sync", HTTP_POST, handleTimeSync);
+      webServer.on("/api/race/status", HTTP_GET, handleRaceStatus);
+      webServer.on("/api/race/lock", HTTP_POST, handleRaceLock);
+      webServer.on("/api/race/reset", HTTP_POST, handleRaceReset);
       webServer.onNotFound(handleNotFound);
       webServer.begin();
       Serial.println("[HTTP] server listening on port 80");

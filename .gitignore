@@ -50,6 +50,8 @@ web/dist/
 web/.vite/
 web/.DS_Store
 
+data/
+
 # macOS cruft
 .DS_Store
 

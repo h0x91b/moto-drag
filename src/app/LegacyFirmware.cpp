@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "app/RaceController.h"
 #include "display/MatrixPanel.h"
 #include "led/Blinker.h"
 #include "net/WebServerModule.h"
@@ -22,6 +23,7 @@ namespace app
     sensors::initLightSensor();
     storage::initAdminState();
     storage::seedRideHistory();
+    initRaceController();
     net::initNetwork();
     // display::initMatrixPanel();
 
@@ -33,6 +35,7 @@ namespace app
     unsigned long now = millis();
     led::tickBlinker(now);
     sensors::tickLightSensor(now);
+    tickRaceController(now);
     // display::tickMatrixPanel(now);
     net::tickNetwork();
   }
