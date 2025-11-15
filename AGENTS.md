@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-This repo hosts firmware for the moto-drag lap timer built on the ESP32-C3 DevKitM-1. Iterate in small steps so track tests stay predictable.
+This repo hosts firmware for the moto-drag lap timer built on the ESP32-WROOM-32 DevKitC (aka ESP32 Dev Module). Iterate in small steps so track tests stay predictable.
 
 ## Project Context
 
@@ -10,20 +10,20 @@ This repo hosts firmware for the moto-drag lap timer built on the ESP32-C3 DevKi
 
 ## Architecture Overview
 
-- `src/main.cpp` bootstraps SPIFFS, the HTTP server, and the blink loop; extend it with helper functions instead of crowding `loop()`.
+- `src/main.cpp` bootstraps SPIFFS, the HTTP server, and the blink loop; extend it with helper functions instead of crowding `loop()`. Mind the ESP32-WROOM-32 pinout (GPIO2 is the onboard LED, ADCs start at GPIO32/33).
 - Static assets reside under `data/` and are flashed with `pio run -t uploadfs`; treat it as the SPA root.
 - Ride snapshots live in typed structs backed by `std::vector` containers (capped at 10 laps each, 100 rides total) and serialize through ArduinoJson; follow that pattern when expanding the API surface.
 
 ## Project Structure & Module Organization
 
-- `platformio.ini` defines the lone `esp32c3` environment plus serial speeds; add new environments only when testing alternate boards.
+- `platformio.ini` defines the lone `esp32dev` environment plus serial speeds; add new environments only when testing alternate boards.
 - Place shared headers in `include/` and reusable modules under `lib/`; document wiring assumptions near each entrypoint.
 - Store calibration blobs or seed datasets alongside the SPA in `data/` so they ride with filesystem flashes.
 
 ## Build, Flash & Monitor Commands
 
 - `pio run` compiles firmware; warnings must be resolved before merge.
-- `pio run -t upload` builds and flashes the DevKitM-1; set `upload_port` if auto-detect fails.
+- `pio run -t upload` builds and flashes the ESP32-WROOM-32 DevKitC; set `upload_port` if auto-detect fails.
 - `pio device monitor --baud 115200` tails serial logs; open it before resetting the board to capture boot notes.
 
 ## Coding Style & Naming Conventions

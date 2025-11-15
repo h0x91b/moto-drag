@@ -8,8 +8,12 @@
 #include <algorithm>
 #include <vector>
 
-const int LED_PIN = 8;           // Onboard LED for ESP32-C3 DevKitM-1 lives on GPIO8
-const int PHOTORESISTOR_PIN = 0; // GPIO0 maps to ADC1_CH0 on ESP32-C3
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 2
+#endif
+
+const int LED_PIN = LED_BUILTIN; // Default LED pin (GPIO2 on ESP32-WROOM-32 DevKitC)
+const int PHOTORESISTOR_PIN = 0; // Legacy sensor pin from the ESP32-C3 build, kept for reference
 const unsigned long BLINK_INTERVAL_MS = 500;
 const unsigned long SENSOR_LOG_INTERVAL_MS = 500;
 
@@ -64,6 +68,8 @@ bool matrixInvertState = false;
 void initMatrix();
 void drawMatrixGreeting(bool inverted);
 void updateMatrixGreeting(unsigned long now);
+void legacySetup();
+void legacyLoop();
 
 void appendRide(uint32_t timestamp, const std::vector<float> &lapTimes)
 {
@@ -353,10 +359,38 @@ void handleLightSensor(unsigned long now)
 void setup()
 {
   pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+  Serial.begin(115200);
+  waitForSerial();
+  Serial.println("\n[BOOT] ESP32-WROOM-32 blink demo ready");
+  Serial.printf("[BOOT] Using built-in LED on GPIO%d\n", LED_PIN);
+  Serial.println("[BOOT] Legacy firmware preserved in legacySetup()/legacyLoop()");
+}
+
+void loop()
+{
+  unsigned long now = millis();
+  if (now - lastBlinkAt < BLINK_INTERVAL_MS)
+  {
+    return;
+  }
+
+  ledState = !ledState;
+  digitalWrite(LED_PIN, ledState ? HIGH : LOW);
+  if (Serial)
+  {
+    Serial.printf("[BLINK] GPIO%d -> %s\n", LED_PIN, ledState ? "ON" : "OFF");
+  }
+  lastBlinkAt = now;
+}
+
+void legacySetup()
+{
+  pinMode(LED_PIN, OUTPUT);
   pinMode(PHOTORESISTOR_PIN, INPUT);
   Serial.begin(115200);
   waitForSerial();
-  Serial.println("\n[BOOT] ESP32-C3 ready with Wi-Fi access point");
+  Serial.println("\n[BOOT] ESP32-WROOM-32 ready with Wi-Fi access point");
 
   if (!SPIFFS.begin(true))
   {
@@ -381,7 +415,7 @@ void setup()
   initMatrix();
 }
 
-void loop()
+void legacyLoop()
 {
   unsigned long now = millis();
   handleBlink(now);
