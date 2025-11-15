@@ -8,29 +8,29 @@ const app = document.querySelector("#app");
 const template = `
   <div class="shell">
     <header class="hero">
-      <div class="eyebrow">First-run wizard</div>
-      <h1>Welcome, Moto-Drag admin</h1>
-      <p>Give the track a name, set the lap plan, then calibrate sensors and sync the clock before riders line up.</p>
-      <div class="status-pill" data-ref="connection">Board link ready</div>
+      <div class="eyebrow">Мастер первой настройки</div>
+      <h1>Добро пожаловать, админ Moto-Drag</h1>
+      <p>Назови трассу, задай план кругов, затем откалибруй датчики и синхронизируй часы перед заездами.</p>
+      <div class="status-pill" data-ref="connection">Связь с модулем установлена</div>
     </header>
 
     <section class="grid">
       <article class="card">
-        <h2>Track profile</h2>
-        <p>These values live on the module and power the SPA right after flashing.</p>
+        <h2>Профиль трассы</h2>
+        <p>Эти значения хранятся на модуле и запускают SPA сразу после прошивки.</p>
         <form data-form="profile">
           <label>
-            Track name
+            Название трассы
             <input
               required
               name="trackName"
               autocomplete="off"
               maxlength="30"
-              placeholder="Tverskaya sprint"
+              placeholder="Например: Тверской спринт"
             />
           </label>
           <label>
-            Target laps
+            План кругов
             <input
               required
               name="lapGoal"
@@ -40,39 +40,39 @@ const template = `
               inputmode="numeric"
               placeholder="3"
             />
-            <span class="hint">Use 1-20 laps; riders can still stop earlier.</span>
+            <span class="hint">Используй 1–20 кругов: пилот всегда сможет остановиться раньше.</span>
           </label>
 
           <button class="btn btn-primary" type="submit">
-            Save to module
+            Сохранить на модуле
           </button>
-          <div class="inline-status" data-state="idle" data-ref="profileStatus">Waiting for input…</div>
+          <div class="inline-status" data-state="idle" data-ref="profileStatus">Ждём ввода…</div>
         </form>
       </article>
 
       <article class="card">
-        <h2>Sensor calibration</h2>
-        <p>Run this on the bike: the module samples both beams and stores light thresholds.</p>
+        <h2>Калибровка датчиков</h2>
+        <p>Запускай прямо на байке: модуль измерит оба луча и сохранит пороги освещённости.</p>
         <div class="actions">
           <button class="btn btn-outline" type="button" data-action="calibrate">
-            Start calibration
+            Начать калибровку
           </button>
           <div class="inline-status" data-state="idle" data-ref="calibrationStatus">
-            Not started
+            Ещё не запускалась
           </div>
           <div class="meta" data-ref="calibrationMeta"></div>
         </div>
       </article>
 
       <article class="card">
-        <h2>Clock sync</h2>
-        <p>Send the phone’s current time so lap timestamps match reality even without Wi-Fi.</p>
+        <h2>Синхронизация часов</h2>
+        <p>Отправь текущее время телефона, чтобы отметки кругов совпадали с реальностью даже без Wi‑Fi.</p>
         <div class="actions">
           <button class="btn btn-outline" type="button" data-action="sync-clock">
-            Send current time
+            Отправить текущее время
           </button>
           <div class="inline-status" data-state="idle" data-ref="clockStatus">
-            Awaiting sync
+            Ждём синхронизацию
           </div>
           <div class="meta" data-ref="clockMeta"></div>
         </div>
@@ -80,28 +80,28 @@ const template = `
     </section>
 
     <section class="progress">
-      <h3>Launch checklist</h3>
+      <h3>Чек-лист запуска</h3>
       <ul class="progress-list">
         <li class="progress-item" data-progress="profile">
           <div class="progress-indicator"></div>
-          Track profile saved
+          Профиль трассы сохранён
         </li>
         <li class="progress-item" data-progress="calibration">
           <div class="progress-indicator"></div>
-          Sensor calibration captured
+          Калибровка датчиков завершена
         </li>
         <li class="progress-item" data-progress="clock">
           <div class="progress-indicator"></div>
-          Clock synced from phone
+          Часы синхронизированы с телефона
         </li>
       </ul>
     </section>
 
     <footer class="footer-cta">
       <button class="btn btn-primary btn-next" type="button" data-ref="nextStep" disabled>
-        Continue to rider setup
+        Перейти к настройке пилотов
       </button>
-      <p class="hint footer-hint">Finish all tasks above to unlock the next step.</p>
+      <p class="hint footer-hint">Выполни все шаги выше, чтобы перейти дальше.</p>
     </footer>
   </div>
   <div class="toast" role="status" aria-live="polite"></div>
@@ -162,7 +162,7 @@ setInterval(() => {
 }, 1000);
 
 async function bootstrap() {
-  setInlineStatus(refs.profileStatus, "Loading from module…", "idle");
+  setInlineStatus(refs.profileStatus, "Загружаем из модуля…", "idle");
   await refreshStateFromServer();
   hydrateProfile();
   hydrateMeta();
@@ -180,20 +180,20 @@ function handleProfileSubmit(event) {
   if (!trackName) {
     return setInlineStatus(
       refs.profileStatus,
-      "Track name is required",
+      "Нужно указать название трассы",
       "error"
     );
   }
   if (!Number.isFinite(lapGoal) || lapGoal < 1 || lapGoal > 20) {
     return setInlineStatus(
       refs.profileStatus,
-      "Lap goal must be between 1 and 20",
+      "Количество кругов должно быть от 1 до 20",
       "error"
     );
   }
 
   const payload = { trackName, lapGoal, updatedAt: Date.now() };
-  setInlineStatus(refs.profileStatus, "Saving…", "idle");
+  setInlineStatus(refs.profileStatus, "Сохраняем…", "idle");
   refs.profileForm.querySelector('button[type="submit"]').disabled = true;
 
   sendCommand("/api/admin/setup", payload)
@@ -204,14 +204,14 @@ function handleProfileSubmit(event) {
         lapGoal,
         updatedAt: payload.updatedAt,
       };
-      setInlineStatus(refs.profileStatus, "Profile saved on module", "success");
-      showToast("Track profile saved");
+      setInlineStatus(refs.profileStatus, "Профиль сохранён на модуле", "success");
+      showToast("Профиль трассы сохранён");
       refreshProgress();
     })
     .catch((error) => {
       console.warn(error);
-      setInlineStatus(refs.profileStatus, "Failed to save profile", "error");
-      showToast("Save failed — retry once the module is online", "error");
+      setInlineStatus(refs.profileStatus, "Не удалось сохранить профиль", "error");
+      showToast("Сохранение не удалось — попробуй ещё раз, когда модуль будет онлайн", "error");
     })
     .finally(() => {
       refs.profileForm.querySelector('button[type="submit"]').disabled = false;
@@ -234,27 +234,27 @@ function handleProfileDraft(event) {
   if (!state.profile.updatedAt) {
     setInlineStatus(
       refs.profileStatus,
-      "Draft not saved on module yet",
+      "Черновик пока не сохранён на модуле",
       "idle"
     );
   }
 }
 
 function handleCalibration() {
-  setInlineStatus(refs.calibrationStatus, "Calibrating…", "idle");
+  setInlineStatus(refs.calibrationStatus, "Калибруем…", "idle");
   sendCommand("/api/sensors/calibrate", { startedAt: Date.now() })
     .then((result) => {
       if (!result.ok) throw result.error;
       state.calibration = { completedAt: Date.now() };
-      setInlineStatus(refs.calibrationStatus, "Calibration stored", "success");
+      setInlineStatus(refs.calibrationStatus, "Калибровка сохранена", "success");
       hydrateMeta();
       refreshProgress();
-      showToast("Sensor calibration updated");
+      showToast("Калибровка датчиков обновлена");
     })
     .catch((error) => {
       console.warn(error);
-      setInlineStatus(refs.calibrationStatus, "Calibration failed", "error");
-      showToast("Could not reach sensors", "error");
+      setInlineStatus(refs.calibrationStatus, "Калибровка не удалась", "error");
+      showToast("Не удалось связаться с датчиками", "error");
     });
 }
 
@@ -269,7 +269,7 @@ function handleClockSync(fromAuto = false) {
   };
   setInlineStatus(
     refs.clockStatus,
-    fromAuto ? "Auto-sync in progress…" : "Sending time…",
+    fromAuto ? "Автосинхронизация…" : "Отправляем время…",
     "idle"
   );
   sendCommand("/api/time/sync", payload)
@@ -285,17 +285,17 @@ function handleClockSync(fromAuto = false) {
       };
       setInlineStatus(
         refs.clockStatus,
-        fromAuto ? "Clock auto-synced" : "Clock updated",
+        fromAuto ? "Часы синхронизированы автоматически" : "Часы обновлены",
         "success"
       );
       hydrateMeta();
       refreshProgress();
-      showToast(fromAuto ? "Clock auto-synced" : "Clock synchronized");
+      showToast(fromAuto ? "Часы синхронизированы автоматически" : "Часы синхронизированы");
     })
     .catch((error) => {
       console.warn(error);
-      setInlineStatus(refs.clockStatus, "Time sync failed", "error");
-      showToast("Time sync failed", "error");
+      setInlineStatus(refs.clockStatus, "Синхронизировать время не удалось", "error");
+      showToast("Синхронизировать время не удалось", "error");
     });
 }
 
@@ -307,11 +307,11 @@ function hydrateProfile() {
       : "";
   if (state.profile.updatedAt) {
     const formatted = formatTimestamp(state.profile.updatedAt);
-    setInlineStatus(refs.profileStatus, `Last saved ${formatted}`, "success");
+    setInlineStatus(refs.profileStatus, `Последнее сохранение ${formatted}`, "success");
   } else if (state.profile.trackName || state.profile.lapGoal) {
     setInlineStatus(
       refs.profileStatus,
-      "Draft not saved on module yet",
+      "Черновик пока не сохранён на модуле",
       "idle"
     );
   }
@@ -319,8 +319,8 @@ function hydrateProfile() {
 
 function hydrateMeta() {
   refs.calibrationMeta.textContent = state.calibration.completedAt
-    ? `Last run ${formatTimestamp(state.calibration.completedAt)}`
-    : "No calibration data yet.";
+    ? `Последний запуск ${formatTimestamp(state.calibration.completedAt)}`
+    : "Данных калибровки пока нет.";
 
   renderClockMeta();
 }
@@ -343,7 +343,7 @@ async function refreshStateFromServer() {
     };
   } catch (error) {
     console.warn(error);
-    setInlineStatus(refs.profileStatus, "Failed to load module state", "error");
+    setInlineStatus(refs.profileStatus, "Не удалось загрузить состояние модуля", "error");
   }
 }
 
@@ -381,8 +381,8 @@ function updateConnectionIndicator() {
   const online = navigator.onLine;
   refs.connectionPill.dataset.state = online ? "online" : "offline";
   refs.connectionPill.textContent = online
-    ? "Phone linked to module AP"
-    : "Offline mode (expected)";
+    ? "Телефон подключён к точке модуля"
+    : "Оффлайн-режим (это нормально)";
 }
 
 function showToast(message, tone = "success") {
@@ -404,8 +404,8 @@ function updateNextStep(unlocked) {
   const hint = refs.nextStep.nextElementSibling;
   if (hint && hint.classList.contains("footer-hint")) {
     hint.textContent = unlocked
-      ? "Great! This will navigate to the rider setup page."
-      : "Finish all tasks above to unlock the next step.";
+      ? "Отлично! Переходим к странице пилотов."
+      : "Выполни все шаги выше, чтобы перейти дальше.";
   }
 }
 
@@ -420,19 +420,19 @@ function handleNextStep() {
 function formatTimestamp(timestamp) {
   try {
     const date = new Date(timestamp);
-    const day = date.toLocaleDateString(undefined, {
+    const day = date.toLocaleDateString("ru-RU", {
       month: "short",
       day: "numeric",
     });
-    const time = date.toLocaleTimeString(undefined, {
+    const time = date.toLocaleTimeString("ru-RU", {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
     });
-    return `${day} at ${time}`;
+    return `${day} в ${time}`;
   } catch {
-    return new Date(timestamp).toLocaleString();
+    return new Date(timestamp).toLocaleString("ru-RU");
   }
 }
 
@@ -498,14 +498,14 @@ function renderClockMeta() {
     return;
   }
   if (!state.clock.syncedAt) {
-    refs.clockMeta.textContent = "Clock has never been synced.";
+    refs.clockMeta.textContent = "Часы ещё ни разу не синхронизировались.";
     return;
   }
   const snapshot = getModuleClockSnapshot();
   const clockNow = formatClockTime(snapshot?.epochMs ?? state.clock.syncedAt);
-  const hintParts = [`Synced ${formatTimestamp(state.clock.syncedAt)}`];
+  const hintParts = [`Синхронизировано ${formatTimestamp(state.clock.syncedAt)}`];
   if (typeof snapshot?.millis === "number") {
-    hintParts.push(`${Math.round(snapshot.millis)} ms`);
+    hintParts.push(`${Math.round(snapshot.millis)} мс`);
   }
   refs.clockMeta.innerHTML = `
     <div class="clock-readout">${clockNow}</div>
@@ -532,7 +532,7 @@ function getModuleClockSnapshot() {
 
 function formatClockTime(timestamp) {
   try {
-    return new Date(timestamp).toLocaleTimeString(undefined, {
+    return new Date(timestamp).toLocaleTimeString("ru-RU", {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",

@@ -1,10 +1,10 @@
 {
-  "trackName": "Батя",
-  "lapGoal": 2,
-  "calibrationAt": 1763211149071,
-  "clockSyncedAt": 1763227132292,
-  "clockSyncedMillis": 14523035,
-  "clockSyncedHostAt": 1763227132297,
+  "trackName": "Батя123",
+  "lapGoal": 3,
+  "calibrationAt": 1763230103081,
+  "clockSyncedAt": 1763230104874,
+  "clockSyncedMillis": 17495617,
+  "clockSyncedHostAt": 1763230104878,
   "rides": [
     [
       1699872000000,
@@ -114,23 +114,55 @@
         6.133,
         6.237
       ]
+    ],
+    [
+      1763229082473,
+      [
+        6.135,
+        6.132
+      ]
+    ],
+    [
+      1763229833237,
+      [
+        5.454,
+        6.478
+      ]
+    ],
+    [
+      1763230137823,
+      [
+        6.993,
+        6.48,
+        6.862
+      ]
+    ],
+    [
+      1763230216439,
+      [
+        6.859,
+        6.712,
+        6.145
+      ]
     ]
   ],
-  "updatedAt": 1763226993475,
+  "updatedAt": 1763230101554,
   "trackLock": {
-    "locked": true,
-    "riderName": "123",
-    "lockedAt": 1763229068205,
-    "startedAt": 1763229070206,
-    "laps": [
-      6.135
-    ],
-    "lastLapMark": 1763229076341
+    "locked": false,
+    "riderName": null,
+    "lockedAt": null,
+    "startedAt": null,
+    "laps": [],
+    "lastLapMark": null
   },
   "lastResult": {
-    "riderName": null,
-    "laps": [],
-    "totalMs": 0,
-    "finishedAt": null
+    "riderName": "Арсений",
+    "laps": [
+      6.859,
+      6.712,
+      6.145
+    ],
+    "totalMs": 19717,
+    "finishedAt": 1763230216439
   }
 }

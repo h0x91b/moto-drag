@@ -1,3 +1,4 @@
+import "./style.css";
 import "./race.css";
 
 const API_TIMEOUT_MS = 5000;
@@ -8,7 +9,7 @@ const RIDER_NAME_STORAGE_KEY = "moto-drag/rider-name";
 const app = document.querySelector("#app");
 
 const template = `
-  <div class="race-shell" data-mode="idle" data-ref="shell">
+  <div class="shell race-shell" data-mode="idle" data-ref="shell">
     <header class="race-hero" data-section="hero">
       <div class="eyebrow">Moto-Drag</div>
       <h1>
@@ -374,12 +375,12 @@ function updateLockUi() {
     }
     refs.timerStateLabel.textContent = "Заезд завершён";
     refs.statusMessage.textContent =
-      "Посмотри на круги и вернись, когда готов к следующему старту.";
+      "Ваш заезд окончен. Посмотри на круги и вернись, когда готов к следующему старту.";
     if (refs.resetBtn) {
       refs.resetBtn.disabled = true;
     }
-    const riderName = state.pendingResult?.riderName || state.riderName;
-    updateTrackOccupant(`Результат: ${riderName}`, "success");
+    const riderName = state.pendingResult?.riderName || state.riderName || "без имени";
+    updateTrackOccupant(`Заезд пилота "${riderName}" завершён — результат:`, "success");
   } else {
     refs.timerStateLabel.textContent = "Ожидание сигнала";
     refs.statusMessage.textContent = "Займи трек только когда стоишь у старта.";
